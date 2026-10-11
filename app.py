@@ -7,15 +7,17 @@
     GET /thanks                  where Stripe sends the owner after paying
 """
 import secrets
+import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import config
 import llm
@@ -24,6 +26,7 @@ import store
 
 SHOWCASE_STARS = (1, 2, 3, 5, 4)  # the preview opens with one written review of each, in this order
 FREE_CARDS = 5  # readable cards on the preview; every card after these is locked
+MAX_CARDS = 200  # cap per page, however many reviews pile up over re-scrapes
 LOREM = ("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor "
          "incididunt ut labore et dolore magna aliqua").split()
 
@@ -41,6 +44,47 @@ async def lifespan(app):
 app = FastAPI(title="ReplyDesk", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=config.BASE_DIR / "templates")
+
+FRIENDLY = {
+    403: ("This link isn't valid", "It may be incomplete or out of date. Open the link from the text we "
+                                   "sent you, or reply to that text and we'll send a fresh one."),
+    404: ("Page not found", "We couldn't find that page. Check the link in your text message."),
+}
+
+
+def _wants_json(request):
+    return request.url.path.endswith(".json") or request.url.path == "/health"
+
+
+@app.exception_handler(StarletteHTTPException)
+async def friendly_http_error(request: Request, exc: StarletteHTTPException):
+    """Owners never see JSON or a stack trace: errors get a short, plain page."""
+    if _wants_json(request):
+        return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
+    heading, message = FRIENDLY.get(exc.status_code, ("Something went wrong", "Please try again in a minute."))
+    if exc.status_code == 403 and request.url.path.startswith("/admin"):
+        heading, message = "Admin link not valid", "Check the key in the address bar."
+    return templates.TemplateResponse(request, "error.html", {"heading": heading, "message": message},
+                                      status_code=exc.status_code)
+
+
+@app.exception_handler(Exception)
+async def friendly_crash(request: Request, exc: Exception):
+    print(f"error on {request.url.path}: {type(exc).__name__}: {exc}", flush=True)  # details stay in the log
+    if _wants_json(request):
+        return JSONResponse({"error": "internal error"}, status_code=500)
+    return templates.TemplateResponse(request, "error.html", {
+        "heading": "Something went wrong", "message": "Please try again in a minute."}, status_code=500)
+
+
+@app.get("/health")
+def health():
+    started = time.time()
+    try:
+        store.get_business("__health__")
+    except Exception as exc:
+        return JSONResponse({"ok": False, "store": store.BACKEND, "error": type(exc).__name__}, status_code=503)
+    return {"ok": True, "store": store.BACKEND, "db_ms": round((time.time() - started) * 1000)}
 
 
 def business_for(slug, token):
@@ -141,7 +185,7 @@ def preview(request: Request, slug: str, t: str = ""):
         return RedirectResponse(f"/full/{urllib.parse.quote(slug)}?{urllib.parse.urlencode({'t': t})}",
                                 status_code=303)
     reviews = store.reviews_for(slug)
-    ordered = preview_order(ready_reviews(reviews))
+    ordered = preview_order(ready_reviews(reviews))[:MAX_CARDS]
     cards = [card(r, locked=i >= FREE_CARDS) for i, r in enumerate(ordered)]
     return templates.TemplateResponse(request, "preview.html", {
         "biz": biz, "cards": cards, "pay_url": payment_url(slug), "price": config.PRICE_USD,
@@ -155,7 +199,7 @@ def full(request: Request, slug: str, t: str = ""):
         query = urllib.parse.urlencode({"t": t})
         return RedirectResponse(f"/p/{urllib.parse.quote(slug)}?{query}", status_code=303)
     reviews = store.reviews_for(slug)
-    cards = [card(r) for r in ready_reviews(reviews)]
+    cards = [card(r) for r in ready_reviews(reviews)[:MAX_CARDS]]
     return templates.TemplateResponse(request, "full.html", {
         "biz": biz, "cards": cards, **stats(reviews)})
 
@@ -169,7 +213,15 @@ def thanks(request: Request):
 
 BUSINESS_ROWS = 300  # caps keep the dashboard fast however much we scrape
 ORDER_ROWS = 50
+STATS_TTL = 5  # seconds; every open admin tab polls stats.json
 _pool = ThreadPoolExecutor(max_workers=4)
+_stats_cache = {"at": 0.0, "value": None}
+
+
+def cached_stats():
+    if _stats_cache["value"] is None or time.time() - _stats_cache["at"] > STATS_TTL:
+        _stats_cache.update(at=time.time(), value=store.stats())
+    return _stats_cache["value"]
 
 
 def require_admin(key):
@@ -206,6 +258,7 @@ def local_time(iso):
 
 
 def back_to_admin(key):
+    _stats_cache["value"] = None  # the next poll shows the change
     return RedirectResponse(f"/admin?{urllib.parse.urlencode({'key': key})}#businesses", status_code=303)
 
 
@@ -230,7 +283,7 @@ def admin(request: Request, key: str = ""):
 @app.get("/admin/stats.json")
 def admin_stats(key: str = ""):
     require_admin(key)
-    return admin_numbers(store.stats())
+    return admin_numbers(cached_stats())
 
 
 @app.post("/admin/mark-paid/{slug}")
