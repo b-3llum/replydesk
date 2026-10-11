@@ -521,10 +521,37 @@ def section_store():
     check("store: the real data/store.json was not touched", _file_sig(store.JSON_PATH) == real_before)
 
 
+def section_llm():
+    """prompts.py and generate.py rules offline, then one live Luminal call with thinking off."""
+    import generate
+    import llm
+    import prompts
+
+    biz = {"name": "Test Diner", "category": "Diner", "phone": "(215) 555-0100"}
+    msgs = prompts.build_messages(biz, {"author": "Sam Lee", "stars": 1,
+                                        "text": "Cold soup and a 40 minute wait for the check."})
+    check("prompts: system + 3 few-shot pairs + the review", len(msgs) == 8
+          and [m["role"] for m in msgs] == ["system"] + ["user", "assistant"] * 3 + ["user"])
+    for (_, reply), stars in zip(prompts.FEW_SHOTS, (5, 3, 1)):
+        broken = generate.problems(reply, {"stars": stars}, "(215) 555-0142")
+        check(f"prompts: the {stars}-star few-shot follows the rules", not broken, broken)
+    for stars in (5, 3, 1):
+        for phone in ("(215) 555-0100", ""):
+            review = {"_id": f"t{stars}", "author": "kevin T.", "stars": stars, "text": ""}
+            text = generate.fill_phone(generate.template_reply(review), phone)
+            check(f"generate: {stars}-star template, phone={bool(phone)}: no placeholder, capitalized",
+                  "[" not in text and "{" not in text and text[0].isupper() and "Kevin" in text, text)
+    out = llm.complete(msgs, tag="smoke")
+    check("llm: live reply is non-empty", bool(out["text"]), out)
+    check("llm: thinking is off (reasoning_tokens == 0)", out["reasoning_tokens"] == 0, out)
+    check("llm: token usage counted", out["tokens_in"] > 0 and out["tokens_out"] > 0, out)
+
+
 # ---------------------------------------------------------------- main
 
 SECTIONS = {
     "store": section_store,
+    "llm": section_llm,
 }
 
 

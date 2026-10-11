@@ -2,6 +2,8 @@
 
     python run.py scrape --query "restaurants Baltimore Avenue Philadelphia" --max 10 [--from-cache]
     python run.py list
+    python run.py generate --business <slug> [--redo]   or   --all
+    python run.py samples --business <slug>
     python run.py migrate
 
 Project modules are imported inside each command so one missing module never breaks the others.
@@ -33,7 +35,17 @@ def cmd_migrate(args):
 
 
 def cmd_generate(args):
-    print("generate: coming in a later checkpoint")
+    import generate
+
+    generate.generate(None if args.all else args.business, redo=args.redo)
+    if args.business and args.samples:
+        generate.print_samples(args.business, args.samples)
+
+
+def cmd_samples(args):
+    import generate
+
+    generate.print_samples(args.business, args.n)
 
 
 def cmd_serve(args):
@@ -56,7 +68,18 @@ def build_parser():
 
     sub.add_parser("list", help="table of stored businesses").set_defaults(func=cmd_list)
     sub.add_parser("migrate", help="copy the JSON store into MongoDB").set_defaults(func=cmd_migrate)
-    sub.add_parser("generate", help="write replies (later checkpoint)").set_defaults(func=cmd_generate)
+    p = sub.add_parser("generate", help="write replies for unanswered reviews (Luminal)")
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--business", help="slug from run.py list")
+    target.add_argument("--all", action="store_true", help="every business")
+    p.add_argument("--redo", action="store_true", help="rewrite replies that already exist")
+    p.add_argument("--samples", type=int, default=5, help="with --business: print N replies (default 5)")
+    p.set_defaults(func=cmd_generate)
+
+    p = sub.add_parser("samples", help="print replies next to their reviews")
+    p.add_argument("--business", required=True, help="slug from run.py list")
+    p.add_argument("--n", type=int, default=5, help="how many (default 5)")
+    p.set_defaults(func=cmd_samples)
     sub.add_parser("serve", help="preview web app (later checkpoint)").set_defaults(func=cmd_serve)
     sub.add_parser("outreach", help="owner outreach (later checkpoint)").set_defaults(func=cmd_outreach)
     return parser
