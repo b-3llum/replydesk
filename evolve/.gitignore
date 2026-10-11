@@ -1,0 +1,14 @@
+__pycache__/
+
+# The repo is public. Anything holding review text, reviewer names or generated replies stays
+# local (the admin card and the scripts read these from disk). summary.json and report.html
+# are the public, anonymized results.
+cache/
+logs/
+exports/
+runs/
+results.json
+validation.json
+blind_pairs.json
+report_full.html
+prompts/best.txt

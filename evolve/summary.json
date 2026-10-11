@@ -1,0 +1,589 @@
+{
+  "run_id": "20261011-170151",
+  "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+  "judge_version": "v2-strict-editor",
+  "split": {
+    "train_reviews": 40,
+    "holdout_reviews": 30,
+    "fresh_reviews": 40,
+    "fresh_businesses": 22
+  },
+  "run": {
+    "baseline_train": 43.76,
+    "baseline_holdout": 40.45,
+    "best_train": 96.35,
+    "best_holdout": 94.0,
+    "best_prompt_id": "p992e41d4d7",
+    "best_strategy": "persona",
+    "best_round": 5,
+    "rounds": [
+      {
+        "round": 1,
+        "best_train": 94.46,
+        "best_id": "p16cf58ceee",
+        "mean_new": 89.91,
+        "best_strategy": "exemplify",
+        "candidates": [
+          {
+            "strategy": "tighten",
+            "id": "pe1c8470b14",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 93.2,
+            "duplicate": false
+          },
+          {
+            "strategy": "exemplify",
+            "id": "p16cf58ceee",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 94.46,
+            "duplicate": false
+          },
+          {
+            "strategy": "persona",
+            "id": "p1b7d8531c6",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 69.14,
+            "duplicate": false
+          },
+          {
+            "strategy": "restructure",
+            "id": "p1db76dda92",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 89.7,
+            "duplicate": false
+          },
+          {
+            "strategy": "shorten",
+            "id": "p5b1eb9e89c",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 92.99,
+            "duplicate": false
+          },
+          {
+            "strategy": "restructure",
+            "id": "pff802f94a8",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 94.3,
+            "duplicate": false
+          },
+          {
+            "strategy": "tighten",
+            "id": "p1b544bdafb",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 92.64,
+            "duplicate": false
+          },
+          {
+            "strategy": "exemplify",
+            "id": "p33a7b630bc",
+            "parent_ids": [
+              "v0"
+            ],
+            "score": 92.86,
+            "duplicate": false
+          }
+        ]
+      },
+      {
+        "round": 2,
+        "best_train": 95.31,
+        "best_id": "p7da6849d4f",
+        "mean_new": 93.69,
+        "best_strategy": "persona",
+        "candidates": [
+          {
+            "strategy": "persona",
+            "id": "p7da6849d4f",
+            "parent_ids": [
+              "p16cf58ceee"
+            ],
+            "score": 95.31,
+            "duplicate": false
+          },
+          {
+            "strategy": "crossover",
+            "id": "p605ec7d175",
+            "parent_ids": [
+              "pff802f94a8",
+              "pe1c8470b14"
+            ],
+            "score": 93.84,
+            "duplicate": false
+          },
+          {
+            "strategy": "shorten",
+            "id": "pef267685ec",
+            "parent_ids": [
+              "pe1c8470b14"
+            ],
+            "score": 94.16,
+            "duplicate": false
+          },
+          {
+            "strategy": "restructure",
+            "id": "pf60835d18a",
+            "parent_ids": [
+              "p5b1eb9e89c"
+            ],
+            "score": 88.28,
+            "duplicate": false
+          },
+          {
+            "strategy": "tighten",
+            "id": "pf0fed7da39",
+            "parent_ids": [
+              "p16cf58ceee"
+            ],
+            "score": 95.08,
+            "duplicate": false
+          },
+          {
+            "strategy": "exemplify",
+            "id": "p3274b37dec",
+            "parent_ids": [
+              "pff802f94a8"
+            ],
+            "score": 95.14,
+            "duplicate": false
+          },
+          {
+            "strategy": "persona",
+            "id": "pebf15c81b6",
+            "parent_ids": [
+              "pe1c8470b14"
+            ],
+            "score": 94.03,
+            "duplicate": false
+          },
+          {
+            "strategy": "crossover",
+            "id": "p16cf58ceee",
+            "parent_ids": [
+              "p16cf58ceee",
+              "p5b1eb9e89c"
+            ],
+            "score": null,
+            "duplicate": true
+          }
+        ]
+      },
+      {
+        "round": 3,
+        "best_train": 95.33,
+        "best_id": "p8011956c52",
+        "mean_new": 94.9,
+        "best_strategy": "crossover",
+        "candidates": [
+          {
+            "strategy": "shorten",
+            "id": "p32f3db07d9",
+            "parent_ids": [
+              "p7da6849d4f"
+            ],
+            "score": 94.94,
+            "duplicate": false
+          },
+          {
+            "strategy": "restructure",
+            "id": "p3274b37dec",
+            "parent_ids": [
+              "p3274b37dec"
+            ],
+            "score": null,
+            "duplicate": true
+          },
+          {
+            "strategy": "tighten",
+            "id": "p75e423cc59",
+            "parent_ids": [
+              "pf0fed7da39"
+            ],
+            "score": 94.99,
+            "duplicate": false
+          },
+          {
+            "strategy": "exemplify",
+            "id": "p80adf31ba9",
+            "parent_ids": [
+              "p16cf58ceee"
+            ],
+            "score": 94.45,
+            "duplicate": false
+          },
+          {
+            "strategy": "persona",
+            "id": "p36c30a7180",
+            "parent_ids": [
+              "p7da6849d4f"
+            ],
+            "score": 94.62,
+            "duplicate": false
+          },
+          {
+            "strategy": "crossover",
+            "id": "p8011956c52",
+            "parent_ids": [
+              "p3274b37dec",
+              "pf0fed7da39"
+            ],
+            "score": 95.33,
+            "duplicate": false
+          },
+          {
+            "strategy": "shorten",
+            "id": "p956c0ea548",
+            "parent_ids": [
+              "pf0fed7da39"
+            ],
+            "score": 94.84,
+            "duplicate": false
+          },
+          {
+            "strategy": "restructure",
+            "id": "pf933c9fcaa",
+            "parent_ids": [
+              "p16cf58ceee"
+            ],
+            "score": 95.15,
+            "duplicate": false
+          }
+        ]
+      },
+      {
+        "round": 4,
+        "best_train": 95.59,
+        "best_id": "p5279a5b446",
+        "mean_new": 94.59,
+        "best_strategy": "exemplify",
+        "candidates": [
+          {
+            "strategy": "tighten",
+            "id": "p62ddd2dbd9",
+            "parent_ids": [
+              "p8011956c52"
+            ],
+            "score": 93.96,
+            "duplicate": false
+          },
+          {
+            "strategy": "exemplify",
+            "id": "p45f6f9cc98",
+            "parent_ids": [
+              "p7da6849d4f"
+            ],
+            "score": 95.49,
+            "duplicate": false
+          },
+          {
+            "strategy": "persona",
+            "id": "p696562392b",
+            "parent_ids": [
+              "pf933c9fcaa"
+            ],
+            "score": 94.96,
+            "duplicate": false
+          },
+          {
+            "strategy": "crossover",
+            "id": "p8011956c52",
+            "parent_ids": [
+              "p8011956c52",
+              "p3274b37dec"
+            ],
+            "score": null,
+            "duplicate": true
+          },
+          {
+            "strategy": "shorten",
+            "id": "p17937a3ca8",
+            "parent_ids": [
+              "p8011956c52"
+            ],
+            "score": 93.85,
+            "duplicate": false
+          },
+          {
+            "strategy": "restructure",
+            "id": "pf1f21843e1",
+            "parent_ids": [
+              "p7da6849d4f"
+            ],
+            "score": 93.11,
+            "duplicate": false
+          },
+          {
+            "strategy": "tighten",
+            "id": "pd1a5bd7e6a",
+            "parent_ids": [
+              "pf933c9fcaa"
+            ],
+            "score": 95.15,
+            "duplicate": false
+          },
+          {
+            "strategy": "exemplify",
+            "id": "p5279a5b446",
+            "parent_ids": [
+              "p3274b37dec"
+            ],
+            "score": 95.59,
+            "duplicate": false
+          }
+        ]
+      },
+      {
+        "round": 5,
+        "best_train": 96.35,
+        "best_id": "p992e41d4d7",
+        "mean_new": 94.86,
+        "best_strategy": "persona",
+        "candidates": [
+          {
+            "strategy": "persona",
+            "id": "p456084d032",
+            "parent_ids": [
+              "p5279a5b446"
+            ],
+            "score": 94.26,
+            "duplicate": false
+          },
+          {
+            "strategy": "crossover",
+            "id": "pdf6fb1d930",
+            "parent_ids": [
+              "p45f6f9cc98",
+              "p8011956c52"
+            ],
+            "score": 95.65,
+            "duplicate": false
+          },
+          {
+            "strategy": "shorten",
+            "id": "p621b21446d",
+            "parent_ids": [
+              "p8011956c52"
+            ],
+            "score": 94.53,
+            "duplicate": false
+          },
+          {
+            "strategy": "restructure",
+            "id": "p2eefedc319",
+            "parent_ids": [
+              "p7da6849d4f"
+            ],
+            "score": 95.09,
+            "duplicate": false
+          },
+          {
+            "strategy": "tighten",
+            "id": "p1adbbc4247",
+            "parent_ids": [
+              "p5279a5b446"
+            ],
+            "score": 94.05,
+            "duplicate": false
+          },
+          {
+            "strategy": "exemplify",
+            "id": "pe8581d144e",
+            "parent_ids": [
+              "p45f6f9cc98"
+            ],
+            "score": 93.6,
+            "duplicate": false
+          },
+          {
+            "strategy": "persona",
+            "id": "p992e41d4d7",
+            "parent_ids": [
+              "p8011956c52"
+            ],
+            "score": 96.35,
+            "duplicate": false
+          },
+          {
+            "strategy": "crossover",
+            "id": "pa1b0677d6c",
+            "parent_ids": [
+              "p5279a5b446",
+              "p7da6849d4f"
+            ],
+            "score": 95.33,
+            "duplicate": false
+          }
+        ]
+      }
+    ],
+    "holdout_pass_rates": {
+      "v0": {
+        "length": 0.0,
+        "specific": 0.933,
+        "name": 1.0,
+        "outcome": 0.933,
+        "clean": 0.0,
+        "judge_mean": 0.7
+      },
+      "best": {
+        "length": 0.967,
+        "specific": 0.9,
+        "name": 1.0,
+        "outcome": 0.967,
+        "clean": 1.0,
+        "judge_mean": 9.0
+      }
+    }
+  },
+  "fresh_validation": {
+    "round1_prompt_id": "p16cf58ceee",
+    "scores": {
+      "v0": {
+        "mean": 41.59,
+        "judge_mean": 0.78,
+        "pass_rates": {
+          "length": 0.075,
+          "specific": 0.825,
+          "name": 1.0,
+          "outcome": 0.975,
+          "clean": 0.075
+        }
+      },
+      "rules": {
+        "mean": 88.99,
+        "judge_mean": 8.43,
+        "pass_rates": {
+          "length": 1.0,
+          "specific": 0.775,
+          "name": 1.0,
+          "outcome": 0.975,
+          "clean": 0.825
+        }
+      },
+      "round1": {
+        "mean": 91.46,
+        "judge_mean": 8.78,
+        "pass_rates": {
+          "length": 1.0,
+          "specific": 0.8,
+          "name": 0.95,
+          "outcome": 0.95,
+          "clean": 1.0
+        }
+      },
+      "best": {
+        "mean": 92.61,
+        "judge_mean": 8.93,
+        "pass_rates": {
+          "length": 0.975,
+          "specific": 0.825,
+          "name": 0.975,
+          "outcome": 0.975,
+          "clean": 1.0
+        }
+      }
+    },
+    "best_vs": {
+      "v0": {
+        "mean_diff": 51.02,
+        "ci95": [
+          47.6,
+          54.3
+        ],
+        "wins": 40,
+        "ties": 0,
+        "losses": 0
+      },
+      "rules": {
+        "mean_diff": 3.62,
+        "ci95": [
+          1.36,
+          6.0
+        ],
+        "wins": 18,
+        "ties": 16,
+        "losses": 6
+      },
+      "round1": {
+        "mean_diff": 1.15,
+        "ci95": [
+          -0.9,
+          3.31
+        ],
+        "wins": 12,
+        "ties": 23,
+        "losses": 5
+      }
+    }
+  },
+  "blind_judge": {
+    "judge": "Claude subagents (different model family from generator/judge), pairwise, randomized A/B, no rubric",
+    "tally": {
+      "rules": {
+        "best": 31,
+        "other": 9,
+        "tie": 0,
+        "missing": 0,
+        "best_was_A": 19,
+        "A_won": 20,
+        "by_band": {
+          "1-2": {
+            "best": 8,
+            "other": 6,
+            "tie": 0
+          },
+          "3": {
+            "best": 4,
+            "other": 2,
+            "tie": 0
+          },
+          "4-5": {
+            "best": 19,
+            "other": 1,
+            "tie": 0
+          }
+        },
+        "sign_test_p": 0.0007
+      },
+      "round1": {
+        "best": 18,
+        "other": 22,
+        "tie": 0,
+        "missing": 0,
+        "best_was_A": 18,
+        "A_won": 22,
+        "by_band": {
+          "1-2": {
+            "best": 2,
+            "other": 12,
+            "tie": 0
+          },
+          "3": {
+            "best": 0,
+            "other": 6,
+            "tie": 0
+          },
+          "4-5": {
+            "best": 16,
+            "other": 4,
+            "tie": 0
+          }
+        },
+        "sign_test_p": 0.6358
+      }
+    }
+  }
+}
