@@ -1,15 +1,19 @@
-{% extends "base.html" %}
+{% extends "owner.html" %}
 {% block title %}{{ biz.name }}: all your review replies{% endblock %}
-{% block badge %}Full set{% endblock %}
+{% block page_class %}{% endblock %}
 
-{% block content %}
+{% block banner %}
+<p class="paid-banner">Paid. Thank you.</p>
+{% endblock %}
+
+{% block reviews %}
 {% if cards %}
 <div class="toolbar">
-  <div class="filters" role="group" aria-label="Filter by stars">
-    <button type="button" class="filter is-active" data-filter="0-5" aria-pressed="true">All</button>
-    <button type="button" class="filter" data-filter="1-2" aria-pressed="false">★ 1-2</button>
-    <button type="button" class="filter" data-filter="3-3" aria-pressed="false">★ 3</button>
-    <button type="button" class="filter" data-filter="4-5" aria-pressed="false">★ 4-5</button>
+  <div class="tabs" role="group" aria-label="Filter by stars">
+    <button type="button" class="tab is-active" data-filter="0-5" aria-pressed="true">All <span class="tab-count">{{ cards | length }}</span></button>
+    <button type="button" class="tab" data-filter="1-2" aria-pressed="false">1-2 stars <span class="tab-count">{{ cards | selectattr("stars", "le", 2) | list | length }}</span></button>
+    <button type="button" class="tab" data-filter="3-3" aria-pressed="false">3 stars <span class="tab-count">{{ cards | selectattr("stars", "eq", 3) | list | length }}</span></button>
+    <button type="button" class="tab" data-filter="4-5" aria-pressed="false">4-5 stars <span class="tab-count">{{ cards | selectattr("stars", "ge", 4) | list | length }}</span></button>
   </div>
   <button type="button" class="btn btn-primary" data-copy-all>Copy all</button>
 </div>
@@ -19,12 +23,12 @@
 {% for c in cards %}
   <article class="card review" data-stars="{{ c.stars }}" data-author="{{ c.author }}">
     <div class="review-head">
-      <span class="avatar tone-{{ c.tone }}" aria-hidden="true">{{ c.initial }}</span>
+      <span class="avatar" aria-hidden="true">{{ c.initial }}</span>
       <div>
         <p class="review-author">{{ c.author }}</p>
         <p class="review-meta">
-          <span class="pill tone-{{ c.tone }}">★ {{ c.stars }}</span>
-          {% if c.date %}<span class="muted small">{{ c.date }}</span>{% endif %}
+          <span class="stars" role="img" aria-label="{{ c.stars }} out of 5 stars">{% for i in range(5) %}<span class="{{ 'on' if i < c.stars else 'off' }}">★</span>{% endfor %}</span>
+          {% if c.date %}<span class="pill tone-gray">{{ c.date }}</span>{% endif %}
         </p>
       </div>
     </div>
@@ -35,13 +39,15 @@
     {% endif %}
     <hr class="divider">
     <p class="label">Your reply</p>
-    <p class="reply-text">{{ c.reply }}</p>
-    <button type="button" class="btn btn-secondary" data-copy>Copy reply</button>
+    <div class="reply-box">
+      <p class="reply-text">{{ c.reply }}</p>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy>Copy</button>
+    </div>
   </article>
 {% else %}
-  <p class="empty muted">No replies are ready yet.</p>
+  <div class="card"><p class="empty">No replies are ready yet. Check back in a few minutes.</p></div>
 {% endfor %}
-  <p class="empty muted" id="filter-empty" hidden>No reviews with these stars.</p>
+  <p class="empty" id="filter-empty" hidden>No reviews with these stars.</p>
 </section>
 {% endblock %}
 
@@ -54,20 +60,20 @@ if (copyAll) {
     var parts = [];
     document.querySelectorAll(".review").forEach(function (card) {
       var reply = card.querySelector(".reply-text").textContent.trim();
-      parts.push("Reply to " + card.dataset.author + " (" + card.dataset.stars + "★):\n" + reply);
+      parts.push("Reply to " + card.dataset.author + " (" + card.dataset.stars + " stars):\n" + reply);
     });
     copyText(parts.join("\n\n"), copyAll);
   });
 }
 
-// Star filters: show only the cards whose data-stars falls in the pill's range.
-document.querySelectorAll("[data-filter]").forEach(function (pill) {
-  pill.addEventListener("click", function () {
-    var range = pill.dataset.filter.split("-");
+// Star tabs: show only the cards whose data-stars falls in the tab's range.
+document.querySelectorAll("[data-filter]").forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    var range = tab.dataset.filter.split("-");
     var low = Number(range[0]), high = Number(range[1]), shown = 0;
     document.querySelectorAll("[data-filter]").forEach(function (other) {
-      other.classList.toggle("is-active", other === pill);
-      other.setAttribute("aria-pressed", other === pill ? "true" : "false");
+      other.classList.toggle("is-active", other === tab);
+      other.setAttribute("aria-pressed", other === tab ? "true" : "false");
     });
     document.querySelectorAll(".review").forEach(function (card) {
       var stars = Number(card.dataset.stars);

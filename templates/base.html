@@ -11,57 +11,9 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="{% block body_class %}{% endblock %}">
-<main class="page">
+<main class="page {% block page_class %}{% endblock %}">
 {% block top %}{% endblock %}
-{% if biz is defined %}
-  <header class="page-header">
-    <div>
-      <h1 class="title">{{ biz.name }}</h1>
-      <p class="muted small">{{ [biz.category, biz.address] | select | join(" · ") }}</p>
-    </div>
-    <span class="pill pill-dark">{% block badge %}Preview{% endblock %}</span>
-  </header>
-
-  <section class="stats">
-    <div class="card stat">
-      <p class="stat-label">Unanswered reviews</p>
-      <div class="stat-row">
-        <span class="stat-number">{{ unanswered }}</span>
-        <span class="pill tone-red">{{ unanswered }} waiting</span>
-      </div>
-      <p class="muted small">Reviews on Google with no reply from you.</p>
-    </div>
-    <div class="card stat">
-      <p class="stat-label">Replies written</p>
-      <div class="stat-row">
-        <span class="stat-number">{{ written }}</span>
-        <span class="pill tone-green">ready to post</span>
-      </div>
-      <p class="muted small">Each one is ready to copy and paste.</p>
-    </div>
-    <div class="card stat">
-      <p class="stat-label">Oldest unanswered</p>
-      <div class="stat-row">
-        <span class="stat-number">{% if oldest_days is none %}&mdash;{% else %}{{ oldest_days }} {{ "day" if oldest_days == 1 else "days" }}{% endif %}</span>
-      </div>
-      <p class="muted small">Most customers expect a reply within a week.</p>
-    </div>
-  </section>
-
-  {% if low_unanswered %}
-  <p class="info-band">{{ low_unanswered }} of your 1-2 star reviews {{ "has" if low_unanswered == 1 else "have" }} no reply. Each one is a customer other people are reading.</p>
-  {% elif unanswered %}
-  <p class="info-band">{{ unanswered }} of your reviews {{ "has" if unanswered == 1 else "have" }} no reply. Each one is a customer other people are reading.</p>
-  {% else %}
-  <p class="info-band">Every one of your reviews has a reply. Nice work.</p>
-  {% endif %}
-{% endif %}
-
 {% block content %}{% endblock %}
-
-{% if biz is defined %}
-  <footer class="footer muted small">Written by ReplyDesk for {{ biz.name }}. You paste, you stay in control.</footer>
-{% endif %}
 </main>
 {% block after_main %}{% endblock %}
 
@@ -69,10 +21,10 @@
 // Copy text, then show "Copied" on the button for 2 seconds.
 function copyText(text, button) {
   function done() {
-    if (!button.dataset.label) button.dataset.label = button.textContent;
+    if (!button.dataset.label) button.dataset.label = button.innerHTML;
     button.textContent = "Copied";
     clearTimeout(button.copyTimer);
-    button.copyTimer = setTimeout(function () { button.textContent = button.dataset.label; }, 2000);
+    button.copyTimer = setTimeout(function () { button.innerHTML = button.dataset.label; }, 2000);
   }
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(done, function () { copyWithTextarea(text); done(); });
@@ -96,7 +48,7 @@ function copyWithTextarea(text) {
   document.body.removeChild(area);
 }
 
-// "Copy reply" buttons copy the reply in their own card.
+// "Copy" buttons on review cards copy the reply in their own card.
 document.addEventListener("click", function (event) {
   var button = event.target.closest("[data-copy]");
   if (!button) return;

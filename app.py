@@ -137,7 +137,9 @@ def stats(reviews):
     unanswered = [r for r in reviews if r.get("owner_replied") is False]
     dates = [d for d in (parse_date(r.get("date")) for r in unanswered) if d]
     return {
+        "total": len(reviews),
         "unanswered": len(unanswered),
+        "unanswered_pct": round(100 * len(unanswered) / len(reviews)) if reviews else 0,
         "low_unanswered": sum(1 for r in unanswered if (r.get("stars") or 0) <= 2),
         "written": len(ready_reviews(reviews)),
         "oldest_days": (datetime.now(timezone.utc) - min(dates)).days if dates else None,
@@ -291,7 +293,7 @@ async def request_preview(request: Request):
 BUSINESS_ROWS = 300  # caps keep the dashboard fast however much we scrape
 ORDER_ROWS = 50
 STATS_TTL = 5  # seconds; every open admin tab polls stats.json
-_pool = ThreadPoolExecutor(max_workers=4)
+_pool = ThreadPoolExecutor(max_workers=6)
 _stats_cache = {"at": 0.0, "value": None}
 
 
@@ -366,6 +368,8 @@ def admin(request: Request, key: str = ""):
     biz_job = _pool.submit(store.list_businesses)
     orders_job = _pool.submit(store.list_orders)
     requests_job = _pool.submit(store.list_requests, 50)
+    midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_job = _pool.submit(store.replies_since, midnight.astimezone(timezone.utc).isoformat(timespec="seconds"))
     businesses = biz_job.result()[:BUSINESS_ROWS]
     rows = [business_row(b) for b in businesses]
     names = {r["slug"]: r["name"] for r in rows}
@@ -376,9 +380,12 @@ def admin(request: Request, key: str = ""):
     leads = [dict(q, when=local_time(q.get("created_at")),
                   maps_link=q.get("maps_url", "") if q.get("maps_url", "").startswith(("https://", "http://")) else "")
              for q in requests_job.result() if q.get("status", "new") == "new"]
+    today = today_job.result()
+    today["cost"] = (today["tokens_in"] + today["tokens_out"]) / 1_000_000 * config.LLM_COST_PER_MILLION_TOKENS
     return templates.TemplateResponse(request, "admin.html", {
         "key": key, "stats": admin_numbers(stats_job.result()), "rows": rows, "first": first,
-        "orders": orders, "price": config.PRICE_USD, "evo": evolution_card(), "leads": leads})
+        "orders": orders, "price": config.PRICE_USD, "evo": evolution_card(), "leads": leads,
+        "today": today, "model": config.get("LUMINAL_MODEL") or ""})
 
 
 @app.get("/admin/stats.json")

@@ -430,6 +430,15 @@ class JsonStore:
     def list_requests(self, limit=50):
         return self._read(lambda data: [dict(r) for r in reversed(data["requests"])][:limit])
 
+    def replies_since(self, iso):
+        def count(data):
+            rows = [r for r in data["reviews"].values() if (r.get("generated_at") or "") >= iso
+                    and r.get("model") not in (None, "template")]
+            return {"replies": len(rows), "tokens_in": sum(r.get("tokens_in") or 0 for r in rows),
+                    "tokens_out": sum(r.get("tokens_out") or 0 for r in rows)}
+
+        return self._read(count)
+
     def stats(self):
         def get(data):
             reviews = list(data["reviews"].values())
@@ -564,6 +573,13 @@ class MongoStore:
             row["_id"] = str(row["_id"])
         return rows
 
+    def replies_since(self, iso):
+        rows = list(self.db.reviews.aggregate([
+            {"$match": {"generated_at": {"$gte": iso}, "model": {"$nin": [None, "template"]}}},
+            {"$group": {"_id": None, "n": {"$sum": 1}, "tin": {"$sum": "$tokens_in"}, "tout": {"$sum": "$tokens_out"}}}]))
+        row = rows[0] if rows else {}
+        return {"replies": row.get("n", 0), "tokens_in": row.get("tin", 0), "tokens_out": row.get("tout", 0)}
+
     def stats(self):
         reviews = self.db.reviews
         tokens = list(reviews.aggregate([{"$group": {
@@ -663,6 +679,11 @@ def add_request(name, phone, maps_url="", plan="one-time"):
 def list_requests(limit=50):
     """Landing-page leads, newest first."""
     return _store().list_requests(limit)
+
+
+def replies_since(iso):
+    """LLM replies written at or after iso (UTC ISO string): {replies, tokens_in, tokens_out}."""
+    return _store().replies_since(iso)
 
 
 def find_businesses(query, limit=8):
