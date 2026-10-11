@@ -267,6 +267,31 @@ body.admin .page { max-width: none; padding: 0; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 
+/* Prompt evolution card (admin) */
+.evo-chart { max-width: 440px; margin: 12px 0 4px; }
+.evo-chart svg { display: block; width: 100%; height: auto; }
+.evo-scores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0 16px; }
+.evo-diff { margin-top: 16px; }
+.evo-cols { display: grid; gap: 12px; }
+.evo-cols > div { min-width: 0; }
+.evo-pre {
+  max-height: 320px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.evo-review { margin: 8px 0 12px; }
+.tone-neutral { background: var(--bg); color: var(--muted); }
+@media (min-width: 720px) {
+  .evo-cols { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 1180px) {
   .admin-grid { grid-template-columns: minmax(0, 1fr); }
   .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

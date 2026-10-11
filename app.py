@@ -10,6 +10,7 @@ import secrets
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -20,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import config
+import evolution
 import llm
 import outreach
 import store
@@ -224,6 +226,26 @@ def cached_stats():
     return _stats_cache["value"]
 
 
+_evo = {"future": None}
+
+
+def evolution_card(wait=0.3):
+    """Prompt-evolution card data, or None while the run is going. The first load after
+    evolve/results.json appears reads the store (and may make 2 LLM calls), so it runs in the
+    background and the card says "in progress" until it is done; later loads come from memory."""
+    if not evolution.RESULTS_PATH.exists():
+        return None
+    if evolution.cached():
+        return evolution.load()
+    future = _evo["future"]
+    if future is None or future.done():
+        future = _evo["future"] = _pool.submit(evolution.load)
+    try:
+        return future.result(timeout=wait)
+    except FutureTimeout:
+        return None
+
+
 def require_admin(key):
     expected = config.get("ADMIN_KEY") or ""
     if not expected or not secrets.compare_digest(key.encode(), expected.encode()):
@@ -239,7 +261,7 @@ def admin_numbers(s):
                 est_cost=round(cost, 4),
                 cost_per_business=round(cost / s["businesses"], 5) if s["businesses"] else 0,
                 reasoning_tokens=llm.logged_reasoning_tokens(),
-                evolution_ready=(config.BASE_DIR / "evolve" / "results.json").exists())
+                evolution_ready=evolution_card(wait=0.05) is not None)
 
 
 def business_row(b):
@@ -277,7 +299,7 @@ def admin(request: Request, key: str = ""):
     first = [r for r in rows if r["status"] == "new" and r["phone"]][:5]  # rows come most unanswered first
     return templates.TemplateResponse(request, "admin.html", {
         "key": key, "stats": admin_numbers(stats_job.result()), "rows": rows, "first": first,
-        "orders": orders, "price": config.PRICE_USD})
+        "orders": orders, "price": config.PRICE_USD, "evo": evolution_card()})
 
 
 @app.get("/admin/stats.json")

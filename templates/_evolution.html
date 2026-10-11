@@ -1,0 +1,87 @@
+{# Prompt evolution card for the admin page: {% include "_evolution.html" %} with evo = evolution.load().
+   evo is None while the evolve run is going; data-evo-pending lets the page's polling reload. #}
+{% if evo is not defined or evo is none %}
+<section class="card evo" data-evo-pending>
+  <div class="card-title"><h2>Prompt evolution</h2></div>
+  <p class="muted">Evolution run in progress</p>
+</section>
+{% else %}
+<section class="card evo">
+  <div class="card-title"><h2>Prompt evolution</h2></div>
+  <p class="muted small">Best training score after each round{% if evo.run_id %} · run {{ evo.run_id }}{% endif %}</p>
+  <div class="evo-chart">{{ evo.svg | safe }}</div>
+
+  <div class="evo-scores">
+    <div>
+      <p class="stat-label">Baseline (held-out)</p>
+      <div class="stat-row">
+        <span class="stat-number">{% if evo.baseline is none %}&mdash;{% else %}{{ "%.1f" | format(evo.baseline) }}{% endif %}</span>
+      </div>
+    </div>
+    <div>
+      <p class="stat-label">Best (held-out)</p>
+      <div class="stat-row">
+        <span class="stat-number">{% if evo.best is none %}&mdash;{% else %}{{ "%.1f" | format(evo.best) }}{% endif %}</span>
+        {% if evo.improvement_pct is not none and evo.improvement_pct > 0 %}
+        <span class="pill tone-green">+{{ "%.1f" | format(evo.improvement_pct) }}% better</span>
+        {% elif evo.improvement_pct is not none %}
+        <span class="pill tone-neutral">{{ "%+.1f" | format(evo.improvement_pct) }}%, not better</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-secondary" data-evo-toggle aria-controls="evo-diff" aria-expanded="false">Show diff</button>
+
+  <div class="evo-diff" id="evo-diff" hidden>
+    <div class="evo-cols">
+      <div>
+        <p class="label">v0 prompt</p>
+        <pre class="evo-pre">{{ evo.v0_prompt or "Prompt file not found." }}</pre>
+      </div>
+      <div>
+        <p class="label">Best prompt</p>
+        <pre class="evo-pre">{{ evo.best_prompt or "Prompt file not found." }}</pre>
+      </div>
+    </div>
+
+    {% if evo.sample %}
+    {% set s = evo.sample %}
+    {% set tone = "green" if s.stars >= 4 else ("amber" if s.stars == 3 else "red") %}
+    <hr class="divider">
+    <p class="label">Held-out review</p>
+    <p class="review-meta">
+      <span class="review-author">{{ s.author }}</span>
+      <span class="pill tone-{{ tone }}">★ {{ s.stars }}</span>
+    </p>
+    <p class="review-text evo-review">{{ s.text }}</p>
+    <div class="evo-cols">
+      <div>
+        <p class="label">v0 reply</p>
+        <p class="reply-text">{{ s.v0_reply }}</p>
+      </div>
+      <div>
+        <p class="label">Best reply</p>
+        <p class="reply-text">{{ s.best_reply }}</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+<script>
+// "Show diff" on the Prompt evolution card. Bound once on document, so it survives the card being re-rendered.
+if (!window.evoToggleBound) {
+  window.evoToggleBound = true;
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-evo-toggle]");
+    if (!button) return;
+    var diff = document.getElementById(button.getAttribute("aria-controls"));
+    if (!diff) return;
+    var opening = diff.hidden;
+    diff.hidden = !opening;
+    button.setAttribute("aria-expanded", opening ? "true" : "false");
+    button.textContent = opening ? "Hide diff" : "Show diff";
+  });
+}
+</script>
