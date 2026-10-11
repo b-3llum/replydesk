@@ -538,9 +538,23 @@ def section_llm():
     for stars in (5, 3, 1):
         for phone in ("(215) 555-0100", ""):
             review = {"_id": f"t{stars}", "author": "kevin T.", "stars": stars, "text": ""}
-            text = generate.fill_phone(generate.template_reply(review), phone)
-            check(f"generate: {stars}-star template, phone={bool(phone)}: no placeholder, capitalized",
-                  "[" not in text and "{" not in text and text[0].isupper() and "Kevin" in text, text)
+            for variant in range(4):
+                review["_id"] = f"t{stars}{variant}"
+                text = generate.fill_phone(generate.template_reply(review, variant), phone)
+                check(f"generate: {stars}-star template {variant}, phone={bool(phone)}: no placeholder, capitalized",
+                      "[" not in text and "{" not in text and text[0].isupper() and "Kevin" in text, text)
+    highs = [generate.template_reply({"_id": "x", "author": "", "stars": 5, "text": ""}, v) for v in range(4)]
+    check("generate: 4 distinct 5-star templates, none says 'whole team'",
+          len(set(highs)) == 4 and not any("whole team" in h for h in highs), highs)
+    low2 = generate.fill_phone(generate.template_reply({"_id": "x", "author": "", "stars": 1, "text": ""}, 1), "")
+    check("generate: no-phone low template reads 'stop by'", "stop by" in low2 and " at us" not in low2, low2)
+    check("generate: opening_key", generate.opening_key("Jade, you ordered three veg tacos.")
+          == "jade you ordered three")
+    check("generate: closing_key", generate.closing_key("Sorry. I'll fix it. Hope to see you soon!")
+          == "hope to see you soon")
+    call = generate.call_key("I'm sorry. I'd like to fix it, so please call us at (215) 796-9890 and ask for the owner.")
+    check("generate: call_key", call == "call us at zzphone and ask for the owner", call)
+
     out = llm.complete(msgs, tag="smoke")
     check("llm: live reply is non-empty", bool(out["text"]), out)
     check("llm: thinking is off (reasoning_tokens == 0)", out["reasoning_tokens"] == 0, out)

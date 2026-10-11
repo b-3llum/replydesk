@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}ReplyDesk{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<main class="page">
+{% if biz is defined %}
+  <header class="page-header">
+    <div>
+      <h1 class="title">{{ biz.name }}</h1>
+      <p class="muted small">{{ [biz.category, biz.address] | select | join(" · ") }}</p>
+    </div>
+    <span class="pill pill-dark">{% block badge %}Preview{% endblock %}</span>
+  </header>
+
+  <section class="stats">
+    <div class="card stat">
+      <p class="stat-label">Unanswered reviews</p>
+      <div class="stat-row">
+        <span class="stat-number">{{ unanswered }}</span>
+        <span class="pill tone-red">{{ unanswered }} waiting</span>
+      </div>
+      <p class="muted small">Reviews on Google with no reply from you.</p>
+    </div>
+    <div class="card stat">
+      <p class="stat-label">Replies written</p>
+      <div class="stat-row">
+        <span class="stat-number">{{ written }}</span>
+        <span class="pill tone-green">ready to post</span>
+      </div>
+      <p class="muted small">Each one is ready to copy and paste.</p>
+    </div>
+    <div class="card stat">
+      <p class="stat-label">Oldest unanswered</p>
+      <div class="stat-row">
+        <span class="stat-number">{% if oldest_days is none %}&mdash;{% else %}{{ oldest_days }} {{ "day" if oldest_days == 1 else "days" }}{% endif %}</span>
+      </div>
+      <p class="muted small">Google recommends replying within a week.</p>
+    </div>
+  </section>
+
+  <p class="info-band">9 out of 10 one-star reviews of small businesses never get a reply. Yours are below.</p>
+{% endif %}
+
+{% block content %}{% endblock %}
+
+{% if biz is defined %}
+  <footer class="footer muted small">Written by ReplyDesk for {{ biz.name }}. You paste, you stay in control.</footer>
+{% endif %}
+</main>
+{% block after_main %}{% endblock %}
+
+<script>
+// Copy text, then show "Copied" on the button for 2 seconds.
+function copyText(text, button) {
+  function done() {
+    if (!button.dataset.label) button.dataset.label = button.textContent;
+    button.textContent = "Copied";
+    clearTimeout(button.copyTimer);
+    button.copyTimer = setTimeout(function () { button.textContent = button.dataset.label; }, 2000);
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done, function () { copyWithTextarea(text); done(); });
+  } else {
+    copyWithTextarea(text);
+    done();
+  }
+}
+
+// Fallback for plain-http pages and older browsers.
+function copyWithTextarea(text) {
+  var area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.top = "0";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  try { document.execCommand("copy"); } catch (err) {}
+  document.body.removeChild(area);
+}
+
+// "Copy reply" buttons copy the reply in their own card.
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-copy]");
+  if (!button) return;
+  var card = button.closest(".review");
+  copyText(card.querySelector(".reply-text").textContent.trim(), button);
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

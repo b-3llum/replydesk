@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ biz.name }}: your review replies{% endblock %}
+{% block body_class %}has-bar{% endblock %}
+
+{% block content %}
+<section class="reviews">
+{% for c in cards %}
+  <article class="card review">
+    <div class="review-head">
+      <span class="avatar tone-{{ c.tone }}" aria-hidden="true">{{ c.initial }}</span>
+      <div>
+        <p class="review-author">{{ c.author }}</p>
+        <p class="review-meta">
+          <span class="pill tone-{{ c.tone }}">★ {{ c.stars }}</span>
+          {% if c.date %}<span class="muted small">{{ c.date }}</span>{% endif %}
+        </p>
+      </div>
+    </div>
+    {% if c.text %}
+    <p class="review-text">{{ c.text }}</p>
+    {% else %}
+    <p class="review-text muted">Rated only, no written review.</p>
+    {% endif %}
+    <hr class="divider">
+    <p class="label">Your reply</p>
+    {% if c.locked %}
+    <div class="locked">
+      <p class="reply-text blurred" aria-hidden="true">{{ c.reply }}</p>
+      <div class="unlock">
+        <a class="btn btn-dark" href="{{ pay_url }}">Unlock all {{ written }} replies for ${{ price }}</a>
+      </div>
+    </div>
+    {% else %}
+    <p class="reply-text">{{ c.reply }}</p>
+    <button type="button" class="btn btn-secondary" data-copy>Copy reply</button>
+    {% endif %}
+  </article>
+{% else %}
+  <p class="empty muted">No replies are ready yet.</p>
+{% endfor %}
+</section>
+{% endblock %}
+
+{% block after_main %}
+<div class="sticky-bar">
+  <a class="btn btn-dark btn-block" href="{{ pay_url }}">Unlock all for ${{ price }}</a>
+</div>
+{% endblock %}

@@ -15,7 +15,7 @@ import config
 TEMPERATURE = 0.7
 MAX_TOKENS = 220
 RETRIES = 3
-RATE_LIMIT_RETRIES = 15  # 429s just mean "wait", so they get their own, larger budget
+RATE_LIMIT_RETRIES = 60  # 429s just mean "wait" (the key is shared), so they get their own, larger budget
 MAX_PER_SECOND = 9  # Luminal allows about 10 requests/s per key, then answers 429 retry-after 1s
 # DeepSeek-V4.1-Flash thinks by default and spends all 220 tokens reasoning, leaving no reply.
 # chat_template_kwargs alone stops working once few-shot turns are in the history; the other two
@@ -109,7 +109,7 @@ def complete(messages, tag=""):
             except ValueError:
                 delay = 1.0
             log.info("call tag=%s rate limited, waiting %.1fs (%d)", tag, delay, waits)
-            time.sleep(delay + random.random())
+            time.sleep(delay + 2 * random.random())
             continue
         if resp.status_code == 429 or resp.status_code >= 500:
             error = f"HTTP {resp.status_code}"
