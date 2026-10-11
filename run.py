@@ -56,7 +56,13 @@ def cmd_serve(args):
 
 
 def cmd_outreach(args):
-    print("outreach: coming in a later checkpoint")
+    import outreach
+
+    path = outreach.write_csv()
+    rows = outreach.rows()
+    print(f"{len(rows)} businesses -> {path}")
+    for r in rows[:10]:
+        print(f"  {r['unanswered']:>3} unanswered  {r['phone'] or '-':16} {r['status']:7} {r['name']}")
 
 
 def build_parser():
@@ -84,7 +90,7 @@ def build_parser():
     p.add_argument("--n", type=int, default=5, help="how many (default 5)")
     p.set_defaults(func=cmd_samples)
     sub.add_parser("serve", help="web app on 0.0.0.0:8000 (preview, full set, thanks)").set_defaults(func=cmd_serve)
-    sub.add_parser("outreach", help="owner outreach (later checkpoint)").set_defaults(func=cmd_outreach)
+    sub.add_parser("outreach", help="write data/outreach.csv, most unanswered first").set_defaults(func=cmd_outreach)
     return parser
 
 

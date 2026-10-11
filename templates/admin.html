@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}ReplyDesk admin{% endblock %}
+{% block body_class %}admin{% endblock %}
+
+{% block content %}
+<div class="admin-layout">
+  <aside class="sidebar">
+    <p class="logo">ReplyDesk</p>
+    <nav class="nav">
+      <a class="nav-item is-active" href="#overview">Overview</a>
+      <a class="nav-item" href="#businesses">Businesses</a>
+      <a class="nav-item" href="#orders">Orders</a>
+    </nav>
+  </aside>
+
+  <div class="admin-main" id="overview">
+    <header class="admin-header">
+      <h1 class="title">Overview</h1>
+      <p class="muted small">Numbers refresh every 15 seconds.</p>
+    </header>
+
+    <section class="admin-stats">
+      <div class="card stat">
+        <p class="stat-label">Businesses scanned</p>
+        <div class="stat-row"><span class="stat-number" data-stat="businesses">{{ stats.businesses }}</span></div>
+        <p class="muted small">Local businesses with 15+ Google reviews.</p>
+      </div>
+      <div class="card stat">
+        <p class="stat-label">Reviews processed</p>
+        <div class="stat-row"><span class="stat-number" data-stat="reviews">{{ "{:,}".format(stats.reviews) }}</span></div>
+        <p class="muted small">All written on Luminal, <span data-stat="reasoning_tokens">{{ stats.reasoning_tokens }}</span> reasoning tokens.</p>
+      </div>
+      <div class="card stat">
+        <p class="stat-label">Unanswered found</p>
+        <div class="stat-row">
+          <span class="stat-number" data-stat="unanswered">{{ "{:,}".format(stats.unanswered) }}</span>
+          <span class="pill tone-red"><span data-stat="unanswered_pct">{{ stats.unanswered_pct }}</span>% of all reviews</span>
+        </div>
+        <p class="muted small">Reviews the owner never answered.</p>
+      </div>
+      <div class="card stat">
+        <p class="stat-label">Revenue today</p>
+        <div class="stat-row">
+          <span class="stat-number">$<span data-stat="revenue_today">{{ "{:,}".format(stats.revenue_today) }}</span></span>
+          <span class="pill tone-green" id="orders-today">{{ stats.orders_today }} order{{ "" if stats.orders_today == 1 else "s" }}</span>
+        </div>
+        <p class="muted small">${{ price }} per business, paid through Stripe.</p>
+      </div>
+    </section>
+
+    <div class="admin-grid">
+      <div class="admin-col">
+        <section class="card" id="businesses">
+          <div class="card-title">
+            <h2>Businesses</h2>
+            <a class="btn btn-secondary btn-sm" href="/admin/export.csv?key={{ key|urlencode }}">Export CSV</a>
+          </div>
+          {% if rows %}
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Name</th><th>Category</th><th>Phone</th><th class="num">Unanswered</th>
+                    <th class="num">Replies ready</th><th>Status</th><th>Preview</th><th></th></tr>
+              </thead>
+              <tbody>
+              {% for r in rows %}
+                <tr>
+                  <td class="strong">{{ r.name }}</td>
+                  <td class="muted">{{ r.category }}</td>
+                  <td class="nowrap">{{ r.phone or "-" }}</td>
+                  <td class="num{{ ' num-red' if r.unanswered > 30 }}">{{ r.unanswered }}</td>
+                  <td class="num">{{ r.ready }}</td>
+                  <td><span class="pill {{ {'paid': 'tone-green', 'texted': 'tone-blue'}.get(r.status, 'tone-grey') }}">{{ r.status }}</span></td>
+                  <td><button type="button" class="btn btn-secondary btn-sm" data-copy-value="{{ r.preview_url }}">Copy link</button></td>
+                  <td>
+                    <div class="actions">
+                      <form method="post" action="/admin/mark-texted/{{ r.slug }}?key={{ key|urlencode }}">
+                        <button class="btn btn-secondary btn-sm"{{ " disabled" if r.status != "new" }}>Texted</button>
+                      </form>
+                      <form method="post" action="/admin/mark-paid/{{ r.slug }}?key={{ key|urlencode }}"
+                            data-confirm="Mark {{ r.name }} as paid (${{ price }})?">
+                        <button class="btn btn-dark btn-sm"{{ " disabled" if r.paid }}>{{ "Paid" if r.paid else "Mark paid" }}</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="empty muted">No businesses yet. Run python run.py scrape to find some.</p>
+          {% endif %}
+        </section>
+
+        <p class="info-band">Businesses with 30+ unanswered reviews close fastest. Call those first.</p>
+
+        <section class="card" id="orders">
+          <div class="card-title">
+            <h2>Orders</h2>
+            <span class="muted small">{{ stats.paid_orders }} total, ${{ "{:,}".format(stats.revenue) }}</span>
+          </div>
+          {% if orders %}
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Business</th><th class="num">Amount</th><th>Method</th><th>Paid</th></tr></thead>
+              <tbody>
+              {% for o in orders %}
+                <tr><td class="strong">{{ o.name }}</td><td class="num">${{ o.amount }}</td>
+                    <td class="muted">{{ o.method }}</td><td class="nowrap muted">{{ o.when }}</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="empty muted">No orders yet. Mark a business paid when its Stripe payment comes in.</p>
+          {% endif %}
+        </section>
+      </div>
+
+      <aside class="admin-side">
+        <section class="card">
+          <div class="card-title"><h2>Do these first</h2></div>
+          {% if first %}
+          <ul class="todo">
+          {% for r in first %}
+            <li>
+              <div>
+                <p class="strong">{{ r.name }}</p>
+                <p class="muted small">{{ r.phone }} · <span class="{{ 'num-red' if r.unanswered > 30 }}">{{ r.unanswered }} unanswered</span></p>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" data-copy-value="{{ r.text }}">Copy text</button>
+            </li>
+          {% endfor %}
+          </ul>
+          {% else %}
+          <p class="empty muted">Everyone with a phone number has been texted.</p>
+          {% endif %}
+        </section>
+
+        <section class="card">
+          <div class="card-title"><h2>Luminal usage</h2></div>
+          <dl class="kv">
+            <dt>Calls</dt><dd data-stat="llm_calls">{{ "{:,}".format(stats.llm_calls) }}</dd>
+            <dt>Tokens in</dt><dd data-stat="tokens_in">{{ "{:,}".format(stats.tokens_in) }}</dd>
+            <dt>Tokens out</dt><dd data-stat="tokens_out">{{ "{:,}".format(stats.tokens_out) }}</dd>
+            <dt>Est. cost</dt><dd>$<span data-stat="est_cost">{{ "%.4f"|format(stats.est_cost) }}</span></dd>
+          </dl>
+          <p class="muted small kv-note">Cost per business: $<span data-stat="cost_per_business">{{ "%.4f"|format(stats.cost_per_business) }}</span></p>
+        </section>
+      </aside>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var ADMIN_KEY = {{ key|tojson }};
+
+// Copy buttons that carry their text: preview links and outreach texts.
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-copy-value]");
+  if (button) copyText(button.dataset.copyValue, button);
+});
+
+// "Mark paid" asks first.
+document.addEventListener("submit", function (event) {
+  var message = event.target.dataset.confirm;
+  if (message && !window.confirm(message)) event.preventDefault();
+});
+
+// Refresh the numbers every 15 seconds.
+var FORMAT = {
+  reviews: function (n) { return n.toLocaleString(); },
+  unanswered: function (n) { return n.toLocaleString(); },
+  revenue_today: function (n) { return n.toLocaleString(); },
+  llm_calls: function (n) { return n.toLocaleString(); },
+  tokens_in: function (n) { return n.toLocaleString(); },
+  tokens_out: function (n) { return n.toLocaleString(); },
+  est_cost: function (n) { return n.toFixed(4); },
+  cost_per_business: function (n) { return n.toFixed(4); }
+};
+function refreshStats() {
+  fetch("/admin/stats.json?key=" + encodeURIComponent(ADMIN_KEY))
+    .then(function (response) { return response.ok ? response.json() : null; })
+    .then(function (s) {
+      if (!s) return;
+      document.querySelectorAll("[data-stat]").forEach(function (el) {
+        var value = s[el.dataset.stat];
+        if (value === undefined || value === null) return;
+        el.textContent = FORMAT[el.dataset.stat] ? FORMAT[el.dataset.stat](value) : value;
+      });
+      var orders = document.getElementById("orders-today");
+      if (orders) orders.textContent = s.orders_today + (s.orders_today === 1 ? " order" : " orders");
+      if (s.evolution_ready && document.querySelector("[data-evo-pending]")) window.location.reload();
+    })
+    .catch(function () {});
+}
+setInterval(refreshStats, 15000);
+</script>
+{% endblock %}

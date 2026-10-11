@@ -47,6 +47,28 @@ def _setup_log():
 _setup_log()
 
 
+_reasoning_cache = {}
+
+
+def logged_reasoning_tokens():
+    """Reasoning tokens summed over every logged call except smoke tests (data/llm.log)."""
+    path = config.DATA_DIR / "llm.log"
+    try:
+        stat = path.stat()
+    except OSError:
+        return 0
+    key = (stat.st_mtime_ns, stat.st_size)
+    if _reasoning_cache.get("key") != key:
+        total = 0
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                match = re.search(r"reasoning_tokens=(\d+)", line)
+                if match and "tag=smoke" not in line:
+                    total += int(match.group(1))
+        _reasoning_cache.update(key=key, total=total)
+    return _reasoning_cache["total"]
+
+
 def model_name():
     return config.require("LUMINAL_MODEL")
 

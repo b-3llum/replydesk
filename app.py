@@ -8,15 +8,18 @@
 """
 import secrets
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import config
+import llm
+import outreach
 import store
 
 SHOWCASE_STARS = (1, 2, 3, 5, 4)  # the preview opens with one written review of each, in this order
@@ -160,3 +163,96 @@ def full(request: Request, slug: str, t: str = ""):
 @app.get("/thanks")
 def thanks(request: Request):
     return templates.TemplateResponse(request, "thanks.html", {})
+
+
+# ---------------------------------------------------------------- admin
+
+BUSINESS_ROWS = 300  # caps keep the dashboard fast however much we scrape
+ORDER_ROWS = 50
+_pool = ThreadPoolExecutor(max_workers=4)
+
+
+def require_admin(key):
+    expected = config.get("ADMIN_KEY") or ""
+    if not expected or not secrets.compare_digest(key.encode(), expected.encode()):
+        raise HTTPException(status_code=403, detail="This admin link is not valid")
+
+
+def admin_numbers(s):
+    """store.stats() plus what the dashboard derives from it."""
+    tokens = (s.get("tokens_in") or 0) + (s.get("tokens_out") or 0)
+    cost = tokens / 1_000_000 * config.LLM_COST_PER_MILLION_TOKENS
+    return dict(s,
+                unanswered_pct=round(100 * s["unanswered"] / s["reviews"]) if s["reviews"] else 0,
+                est_cost=round(cost, 4),
+                cost_per_business=round(cost / s["businesses"], 5) if s["businesses"] else 0,
+                reasoning_tokens=llm.logged_reasoning_tokens(),
+                evolution_ready=(config.BASE_DIR / "evolve" / "results.json").exists())
+
+
+def business_row(b):
+    return {"slug": b["_id"], "name": b.get("name") or b["_id"], "category": b.get("category") or "",
+            "phone": b.get("phone") or "", "unanswered": b.get("unanswered_count") or 0,
+            "ready": b.get("replies_ready") or 0, "status": b.get("status") or "new",
+            "paid": bool(b.get("paid")), "preview_url": outreach.preview_url(b), "text": outreach.outreach_text(b)}
+
+
+def local_time(iso):
+    dt = parse_date(iso)
+    if not dt:
+        return ""
+    local = dt.astimezone()
+    return f"{local:%b} {local.day}, {local.strftime('%I:%M %p').lstrip('0')}"
+
+
+def back_to_admin(key):
+    return RedirectResponse(f"/admin?{urllib.parse.urlencode({'key': key})}#businesses", status_code=303)
+
+
+@app.get("/admin")
+def admin(request: Request, key: str = ""):
+    require_admin(key)
+    stats_job = _pool.submit(store.stats)  # three Atlas round trips at once instead of in a row
+    biz_job = _pool.submit(store.list_businesses)
+    orders_job = _pool.submit(store.list_orders)
+    businesses = biz_job.result()[:BUSINESS_ROWS]
+    rows = [business_row(b) for b in businesses]
+    names = {r["slug"]: r["name"] for r in rows}
+    orders = [{"name": names.get(o["business_id"], o["business_id"]), "amount": o.get("amount") or 0,
+               "method": o.get("method") or "", "when": local_time(o.get("paid_at"))}
+              for o in orders_job.result()[:ORDER_ROWS]]
+    first = [r for r in rows if r["status"] == "new" and r["phone"]][:5]  # rows come most unanswered first
+    return templates.TemplateResponse(request, "admin.html", {
+        "key": key, "stats": admin_numbers(stats_job.result()), "rows": rows, "first": first,
+        "orders": orders, "price": config.PRICE_USD})
+
+
+@app.get("/admin/stats.json")
+def admin_stats(key: str = ""):
+    require_admin(key)
+    return admin_numbers(store.stats())
+
+
+@app.post("/admin/mark-paid/{slug}")
+def admin_mark_paid(slug: str, key: str = ""):
+    require_admin(key)
+    if store.get_business(slug) is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    store.mark_paid(slug, "stripe", config.PRICE_USD)
+    return back_to_admin(key)
+
+
+@app.post("/admin/mark-texted/{slug}")
+def admin_mark_texted(slug: str, key: str = ""):
+    require_admin(key)
+    if store.get_business(slug) is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    store.mark_texted(slug)
+    return back_to_admin(key)
+
+
+@app.get("/admin/export.csv")
+def admin_export(key: str = ""):
+    require_admin(key)
+    return Response("﻿" + outreach.csv_text(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="replydesk-outreach.csv"'})
