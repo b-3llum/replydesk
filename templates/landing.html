@@ -4,7 +4,7 @@
 
 {% block content %}
 <header class="landing-header">
-  <span class="wordmark">ReplyDesk</span>
+  <span class="wordmark"><span class="logo-dot"></span>ReplyDesk</span>
   <a class="btn btn-dark btn-sm" href="#find">Find my business</a>
 </header>
 
@@ -17,18 +17,22 @@
   </div>
 </section>
 
-<section class="stats">
-  <div class="card stat">
-    <div class="stat-row"><span class="stat-number">{{ "{:,}".format(stats.businesses) }}</span></div>
-    <p class="muted small">Philly businesses scanned</p>
+{% import "_icons.html" as ic %}
+<section class="card metrics metrics-3">
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("store") }}</span>
+    <span class="metric-number">{{ "{:,}".format(stats.businesses) }}</span>
+    <span class="metric-label">Philly businesses scanned</span>
   </div>
-  <div class="card stat">
-    <div class="stat-row"><span class="stat-number">{{ "{:,}".format(stats.unanswered) }}</span></div>
-    <p class="muted small">reviews with no reply</p>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("alert") }}</span>
+    <span class="metric-number">{{ "{:,}".format(stats.unanswered) }}</span>
+    <span class="metric-label">reviews with no reply</span>
   </div>
-  <div class="card stat">
-    <div class="stat-row"><span class="stat-number">{{ "{:,}".format(stats.replies_ready) }}</span></div>
-    <p class="muted small">replies already written</p>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("pen") }}</span>
+    <span class="metric-number">{{ "{:,}".format(stats.replies_ready) }}</span>
+    <span class="metric-label">replies already written</span>
   </div>
 </section>
 

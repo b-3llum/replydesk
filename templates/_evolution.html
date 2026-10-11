@@ -1,14 +1,20 @@
 {# Prompt evolution card for the admin page: {% include "_evolution.html" %} with evo = evolution.load().
    evo is None while the evolve run is going; data-evo-pending lets the page's polling reload. #}
+{% import "_icons.html" as ic %}
 {% if evo is not defined or evo is none %}
 <section class="card evo" data-evo-pending>
-  <div class="card-title"><h2>Prompt evolution</h2></div>
+  <div class="card-head">
+    <span class="chip">{{ ic.icon("trend", 16) }}</span>
+    <h2>Prompt evolution</h2>
+  </div>
   <p class="muted">Evolution run in progress</p>
 </section>
 {% else %}
 <section class="card evo">
-  <div class="card-title"><h2>Prompt evolution</h2></div>
-  <p class="muted small">Best training score after each round{% if evo.run_id %} · run {{ evo.run_id }}{% endif %}</p>
+  <div class="card-head">
+    <span class="chip">{{ ic.icon("trend", 16) }}</span>
+    <h2>Prompt evolution<span class="sub">Best training score after each round{% if evo.run_id %} · run {{ evo.run_id }}{% endif %}</span></h2>
+  </div>
   <div class="evo-chart">{{ evo.svg | safe }}</div>
 
   <div class="evo-scores">

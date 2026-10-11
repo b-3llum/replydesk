@@ -1,0 +1,66 @@
+{# Shared layout for the owner's pages (preview and full set). #}
+{% extends "base.html" %}
+{% block page_class %}owner-wide{% endblock %}
+
+{% block content %}
+{% import "_icons.html" as ic %}
+{# These come from app.py; the fallbacks keep the page whole on a server still running older code. #}
+{% set total_n = total if total is defined else (biz.review_count or unanswered) %}
+{% set pct = unanswered_pct if unanswered_pct is defined else ((100 * unanswered / total_n) | round | int if total_n else 0) %}
+{% set rating_text = "%.1f" | format(biz.rating) if biz.rating else "-" %}
+<div class="owner-grid">
+  <div class="owner-main">
+    <p class="logo-sm"><span class="logo-dot"></span>ReplyDesk</p>
+    {% block banner %}{% endblock %}
+    <header class="owner-head">
+      <h1 class="title">{{ biz.name }}</h1>
+      <p class="muted small">{{ [biz.category, biz.address] | select | join(" · ") }}</p>
+    </header>
+
+    <section class="card metrics" aria-label="Your reviews at a glance">
+      <div class="metric">
+        <span class="chip chip-lg">{{ ic.icon("message") }}</span>
+        <span class="metric-label">Total reviews</span>
+        <span class="metric-number">{{ total_n }}</span>
+        <span class="pill tone-gray">most recent</span>
+      </div>
+      <div class="metric">
+        <span class="chip chip-lg">{{ ic.icon("alert") }}</span>
+        <span class="metric-label">Unanswered</span>
+        <span class="metric-number">{{ unanswered }}</span>
+        <span class="pill tone-red">{{ pct }}% no reply</span>
+      </div>
+      <div class="metric">
+        <span class="chip chip-lg">{{ ic.icon("star") }}</span>
+        <span class="metric-label">Avg rating</span>
+        <span class="metric-number">{{ rating_text }}</span>
+        <span class="pill tone-amber">on Google</span>
+      </div>
+      <div class="metric">
+        <span class="chip chip-lg">{{ ic.icon("check") }}</span>
+        <span class="metric-label">Replies ready</span>
+        <span class="metric-number">{{ written }}</span>
+        <span class="pill tone-green">ready</span>
+      </div>
+    </section>
+    <p class="insight">
+      {% if low_unanswered %}{{ low_unanswered }} of your one- and two-star reviews never got an owner reply. Yours are below, drafted in your voice.
+      {% else %}Your unanswered reviews are below, drafted in your voice.{% endif %}
+    </p>
+
+    {% if unanswered %}
+    <div class="info"><span class="info-icon" aria-hidden="true">i</span>
+      <p><strong>{{ unanswered }} review{{ "" if unanswered == 1 else "s" }} {{ "has" if unanswered == 1 else "have" }} never gotten a reply. We wrote one for each.</strong> Copy, paste into Google, done.</p>
+    </div>
+    {% else %}
+    <div class="info"><span class="info-icon" aria-hidden="true">i</span>
+      <p><strong>Every one of your reviews has a reply.</strong> Nice work.</p>
+    </div>
+    {% endif %}
+
+    {% block reviews %}{% endblock %}
+    <footer class="footer muted small">Written by ReplyDesk for {{ biz.name }}. You paste, you stay in control.</footer>
+  </div>
+  {% block side %}{% endblock %}
+</div>
+{% endblock %}

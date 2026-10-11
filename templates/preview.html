@@ -1,22 +1,23 @@
-{% extends "base.html" %}
+{% extends "owner.html" %}
 {% block title %}{{ biz.name }}: your review replies{% endblock %}
 {% block body_class %}has-bar{% endblock %}
 
-{% block top %}
+{% block banner %}
 <p class="paid-band" id="paid-band" hidden>Payment received, unlocking now</p>
 {% endblock %}
 
-{% block content %}
+{% block reviews %}
+{% import "_icons.html" as ic %}
 <section class="reviews">
 {% for c in cards %}
   <article class="card review">
     <div class="review-head">
-      <span class="avatar tone-{{ c.tone }}" aria-hidden="true">{{ c.initial }}</span>
+      <span class="avatar" aria-hidden="true">{{ c.initial }}</span>
       <div>
         <p class="review-author">{{ c.author }}</p>
         <p class="review-meta">
-          <span class="pill tone-{{ c.tone }}">★ {{ c.stars }}</span>
-          {% if c.date %}<span class="muted small">{{ c.date }}</span>{% endif %}
+          <span class="stars" role="img" aria-label="{{ c.stars }} out of 5 stars">{% for i in range(5) %}<span class="{{ 'on' if i < c.stars else 'off' }}">★</span>{% endfor %}</span>
+          {% if c.date %}<span class="pill tone-gray">{{ c.date }}</span>{% endif %}
         </p>
       </div>
     </div>
@@ -28,26 +29,44 @@
     <hr class="divider">
     <p class="label">Your reply</p>
     {% if c.locked %}
-    <div class="locked">
+    <div class="reply-box locked">
       <p class="reply-text blurred" aria-hidden="true">{{ c.reply }}</p>
-      <div class="unlock">
-        <a class="btn btn-dark" href="{{ pay_url }}" data-unlock>Unlock all {{ written }} replies for ${{ price }}</a>
-      </div>
+      <a class="lock" href="{{ pay_url }}" data-unlock aria-label="Unlock all {{ written }} replies for ${{ price }}">
+        <span class="lock-badge">{{ ic.icon("lock", 16) }}Unlock</span>
+      </a>
     </div>
     {% else %}
-    <p class="reply-text">{{ c.reply }}</p>
-    <button type="button" class="btn btn-secondary" data-copy>Copy reply</button>
+    <div class="reply-box">
+      <p class="reply-text">{{ c.reply }}</p>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy>Copy</button>
+    </div>
     {% endif %}
   </article>
 {% else %}
-  <p class="empty muted">No replies are ready yet.</p>
+  <div class="card"><p class="empty">No replies are ready yet. Check back in a few minutes.</p></div>
 {% endfor %}
 </section>
 {% endblock %}
 
+{% block side %}
+{% import "_icons.html" as ic %}
+<aside class="side-col">
+  <section class="card">
+    <div class="card-head">
+      <span class="chip">{{ ic.icon("lock", 16) }}</span>
+      <h2>Unlock every reply<span class="sub">{{ written }} written for {{ biz.name }}</span></h2>
+    </div>
+    <a class="btn btn-cta btn-block" href="{{ pay_url }}" data-unlock>Unlock all {{ written }} replies</a>
+    <p class="unlock-price">${{ price }} one time</p>
+    <p class="insight">You paste each reply yourself. Nothing is posted without you.</p>
+  </section>
+</aside>
+{% endblock %}
+
 {% block after_main %}
 <div class="sticky-bar">
-  <a class="btn btn-dark btn-block" href="{{ pay_url }}" data-unlock>Unlock all for ${{ price }}</a>
+  <a class="btn btn-cta btn-block" href="{{ pay_url }}" data-unlock>Unlock all {{ written }} replies</a>
+  <p class="unlock-price">${{ price }} one time</p>
 </div>
 {% endblock %}
 
