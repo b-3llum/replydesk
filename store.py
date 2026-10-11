@@ -159,14 +159,14 @@ def _reply_fields(reply, model, tokens_in, tokens_out):
 # ---------------------------------------------------------------- JSON backend
 
 def _empty():
-    return {"businesses": {}, "reviews": {}, "orders": []}
+    return {"businesses": {}, "reviews": {}, "orders": [], "requests": []}
 
 
 def _parse(raw):
     data = json.loads(raw.decode("utf-8-sig")) if raw.strip() else _empty()
     if not isinstance(data, dict):
         raise ValueError("store file is not a JSON object")
-    for key, kind in (("businesses", dict), ("reviews", dict), ("orders", list)):
+    for key, kind in (("businesses", dict), ("reviews", dict), ("orders", list), ("requests", list)):
         if not isinstance(data.setdefault(key, kind()), kind):
             raise ValueError(f"store file: {key!r} has the wrong type")
     return data
@@ -418,6 +418,18 @@ class JsonStore:
     def list_orders(self):
         return self._read(lambda data: _sort_orders(list(reversed(data["orders"]))))
 
+    def add_request(self, doc):
+        doc = dict(doc, _id=secrets.token_hex(12))
+
+        def apply(data):
+            data["requests"].append(doc)
+            return dict(doc), True
+
+        return self._mutate(apply)
+
+    def list_requests(self, limit=50):
+        return self._read(lambda data: [dict(r) for r in reversed(data["requests"])][:limit])
+
     def stats(self):
         def get(data):
             reviews = list(data["reviews"].values())
@@ -540,6 +552,18 @@ class MongoStore:
             order["_id"] = str(order["_id"])
         return _sort_orders(orders)
 
+    def add_request(self, doc):
+        doc = dict(doc)
+        self.db.requests.insert_one(doc)
+        doc["_id"] = str(doc["_id"])
+        return doc
+
+    def list_requests(self, limit=50):
+        rows = list(self.db.requests.find().sort([("created_at", -1), ("_id", -1)]).limit(limit))
+        for row in rows:
+            row["_id"] = str(row["_id"])
+        return rows
+
     def stats(self):
         reviews = self.db.reviews
         tokens = list(reviews.aggregate([{"$group": {
@@ -628,6 +652,25 @@ def mark_texted(slug):
 
 def list_orders():
     return _store().list_orders()
+
+
+def add_request(name, phone, maps_url="", plan="one-time"):
+    """Save a landing-page lead to "requests": {name, phone, maps_url, plan, created_at, status: new}."""
+    return _store().add_request({"name": name, "phone": phone, "maps_url": maps_url, "plan": plan,
+                                 "created_at": _now(), "status": "new"})
+
+
+def list_requests(limit=50):
+    """Landing-page leads, newest first."""
+    return _store().list_requests(limit)
+
+
+def find_businesses(query, limit=8):
+    """Case-insensitive partial match on business name, most unanswered first."""
+    query = " ".join((query or "").lower().split())
+    if not query:
+        return []
+    return [b for b in list_businesses() if query in " ".join((b.get("name") or "").lower().split())][:limit]
 
 
 def stats():

@@ -6,6 +6,7 @@
     GET /full/{slug}?t=token     every reply, once the business has paid
     GET /thanks                  where Stripe sends the owner after paying
 """
+import re
 import secrets
 import time
 import urllib.parse
@@ -18,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import config
@@ -217,6 +219,73 @@ def thanks(request: Request):
     return templates.TemplateResponse(request, "thanks.html", {})
 
 
+# ---------------------------------------------------------------- landing page and leads
+
+EXAMPLE_SLUG = "loco-pez-west-philly-b71a"  # "See a real example"
+PLANS = ("one-time", "monthly")
+
+
+def landing_context(**extra):
+    s = cached_stats()  # 5 s cache: the public page must not hammer Atlas
+    example = store.get_business(EXAMPLE_SLUG)
+    return dict({
+        "stats": s,
+        "pct": round(100 * s["unanswered"] / s["reviews"]) if s["reviews"] else 0,
+        "example_url": f"/p/{EXAMPLE_SLUG}?t={example['preview_token']}" if example else None,
+        "plan": "one-time",
+    }, **extra)
+
+
+def _form(body):
+    """application/x-www-form-urlencoded body -> {field: value} (no python-multipart needed)."""
+    return {k: v[0].strip() for k, v in urllib.parse.parse_qs(body.decode("utf-8", "replace")).items()}
+
+
+def _name_from_maps_link(text):
+    """'https://www.google.com/maps/place/Loco+Pez/@...' -> 'Loco Pez'; '' for other links."""
+    match = re.search(r"/maps/place/([^/@?]+)", text)
+    return urllib.parse.unquote_plus(match.group(1)) if match else ""
+
+
+@app.get("/")
+def landing(request: Request, plan: str = "", sent: str = ""):
+    waitlist = plan == "monthly"  # "Join the waitlist" opens the request form on the monthly plan
+    return templates.TemplateResponse(request, "landing.html", landing_context(
+        plan="monthly" if waitlist else "one-time", show_form=waitlist, sent=bool(sent)))
+
+
+@app.post("/find")
+async def find(request: Request):
+    query = _form(await request.body()).get("q", "")[:200]
+    is_link = query.lower().startswith(("http://", "https://"))
+    name = _name_from_maps_link(query) if is_link else query
+    matches = await run_in_threadpool(store.find_businesses, name) if name else []
+    results = [{"name": b.get("name") or b["_id"], "address": b.get("address") or "",
+                "unanswered": b.get("unanswered_count") or 0, "url": f"/p/{b['_id']}?t={b['preview_token']}"}
+               for b in matches]
+    context = await run_in_threadpool(
+        landing_context, query=query, searched=bool(query), results=results, show_form=bool(query) and not results,
+        prefill_name="" if is_link else query, prefill_maps=query if is_link else "")
+    return templates.TemplateResponse(request, "landing.html", context)
+
+
+@app.post("/request")
+async def request_preview(request: Request):
+    form = _form(await request.body())
+    if form.get("website"):  # honeypot field, hidden from people: only bots fill it
+        return RedirectResponse("/?sent=1#find", status_code=303)
+    name, phone = form.get("name", "")[:120], form.get("phone", "")[:40]
+    maps_url, plan = form.get("maps_url", "")[:500], form.get("plan", "one-time")
+    plan = plan if plan in PLANS else "one-time"
+    if not name or len(re.sub(r"\D", "", phone)) < 7:
+        context = await run_in_threadpool(
+            landing_context, show_form=True, plan=plan, prefill_name=name, prefill_phone=phone,
+            prefill_maps=maps_url, form_error="Add your business name and a phone number we can text.")
+        return templates.TemplateResponse(request, "landing.html", context, status_code=400)
+    await run_in_threadpool(store.add_request, name, phone, maps_url, plan)
+    return RedirectResponse("/?sent=1#find", status_code=303)
+
+
 # ---------------------------------------------------------------- admin
 
 BUSINESS_ROWS = 300  # caps keep the dashboard fast however much we scrape
@@ -296,6 +365,7 @@ def admin(request: Request, key: str = ""):
     stats_job = _pool.submit(store.stats)  # three Atlas round trips at once instead of in a row
     biz_job = _pool.submit(store.list_businesses)
     orders_job = _pool.submit(store.list_orders)
+    requests_job = _pool.submit(store.list_requests, 50)
     businesses = biz_job.result()[:BUSINESS_ROWS]
     rows = [business_row(b) for b in businesses]
     names = {r["slug"]: r["name"] for r in rows}
@@ -303,9 +373,12 @@ def admin(request: Request, key: str = ""):
                "method": o.get("method") or "", "when": local_time(o.get("paid_at"))}
               for o in orders_job.result()[:ORDER_ROWS]]
     first = [r for r in rows if r["status"] == "new" and r["phone"]][:5]  # rows come most unanswered first
+    leads = [dict(q, when=local_time(q.get("created_at")),
+                  maps_link=q.get("maps_url", "") if q.get("maps_url", "").startswith(("https://", "http://")) else "")
+             for q in requests_job.result() if q.get("status", "new") == "new"]
     return templates.TemplateResponse(request, "admin.html", {
         "key": key, "stats": admin_numbers(stats_job.result()), "rows": rows, "first": first,
-        "orders": orders, "price": config.PRICE_USD, "evo": evolution_card()})
+        "orders": orders, "price": config.PRICE_USD, "evo": evolution_card(), "leads": leads})
 
 
 @app.get("/admin/stats.json")

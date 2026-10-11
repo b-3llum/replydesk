@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}ReplyDesk: every Google review answered{% endblock %}
+{% block body_class %}landing{% endblock %}
+
+{% block content %}
+<header class="landing-header">
+  <span class="wordmark">ReplyDesk</span>
+  <a class="btn btn-dark btn-sm" href="#find">Find my business</a>
+</header>
+
+<section class="hero">
+  <h1 class="hero-title">Your Google reviews are talking. Nobody's answering.</h1>
+  <p class="hero-sub muted">{{ pct }}% of reviews at Philly small businesses have no owner reply. We write every reply in your voice. You copy, paste, done.</p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="#find">Find my business</a>
+    {% if example_url %}<a class="btn btn-secondary" href="{{ example_url }}">See a real example</a>{% endif %}
+  </div>
+</section>
+
+<section class="stats">
+  <div class="card stat">
+    <div class="stat-row"><span class="stat-number">{{ "{:,}".format(stats.businesses) }}</span></div>
+    <p class="muted small">Philly businesses scanned</p>
+  </div>
+  <div class="card stat">
+    <div class="stat-row"><span class="stat-number">{{ "{:,}".format(stats.unanswered) }}</span></div>
+    <p class="muted small">reviews with no reply</p>
+  </div>
+  <div class="card stat">
+    <div class="stat-row"><span class="stat-number">{{ "{:,}".format(stats.replies_ready) }}</span></div>
+    <p class="muted small">replies already written</p>
+  </div>
+</section>
+
+<h2 class="section-title">How it works</h2>
+<section class="grid-3">
+  <div class="card"><span class="step-num">1</span><p class="strong">We find your unanswered reviews</p></div>
+  <div class="card"><span class="step-num">2</span><p class="strong">AI writes a reply for each, specific and in your voice</p></div>
+  <div class="card"><span class="step-num">3</span><p class="strong">You copy and paste. Your profile looks alive again.</p></div>
+</section>
+
+<h2 class="section-title">Pricing</h2>
+<section class="grid-2">
+  <div class="card price">
+    <p class="stat-label">Backlog cleanup</p>
+    <p class="price-line"><span class="stat-number">$29</span><span class="muted">one time</span></p>
+    <p class="muted small">Every unanswered review you have today.</p>
+    <a class="btn btn-primary btn-block" href="#find">Find my business</a>
+  </div>
+  <div class="card price">
+    <p class="stat-label">Ongoing <span class="pill tone-grey">Coming soon</span></p>
+    <p class="price-line"><span class="stat-number">$19</span><span class="muted">/month</span></p>
+    <p class="muted small">New reviews answered every week, auto-posting when you connect Google.</p>
+    <a class="btn btn-secondary btn-block" href="/?plan=monthly#request">Join the waitlist</a>
+  </div>
+</section>
+
+<section class="card find" id="find">
+  <h2 class="section-title">Find my business</h2>
+  {% if sent %}
+  <p class="paid-band">Got it. We'll text you a preview link within the hour.</p>
+  {% endif %}
+  <form method="post" action="/find#find" class="find-form">
+    <input class="input" name="q" value="{{ query or '' }}" placeholder="Business name or Google Maps link"
+           aria-label="Business name or Google Maps link" required maxlength="200">
+    <button class="btn btn-dark">Find</button>
+  </form>
+
+  {% if results %}
+  <div class="results">
+    {% for r in results %}
+    <div class="result">
+      <div>
+        <p class="strong">{{ r.name }}</p>
+        {% if r.address %}<p class="muted small">{{ r.address }}</p>{% endif %}
+        <p class="result-count"><span class="pill tone-red">{{ r.unanswered }} reviews with no reply</span></p>
+      </div>
+      <a class="btn btn-primary" href="{{ r.url }}">See my replies</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% elif searched %}
+  <p class="muted small find-note">We haven't scanned that business yet. Tell us where to text your preview.</p>
+  {% endif %}
+
+  {% if show_form %}
+  <form method="post" action="/request" class="request-form" id="request">
+    {% if form_error %}<p class="form-error">{{ form_error }}</p>{% endif %}
+    <label>Business name
+      <input class="input" name="name" value="{{ prefill_name or '' }}" required maxlength="120">
+    </label>
+    <label>Phone
+      <input class="input" name="phone" type="tel" value="{{ prefill_phone or '' }}" required maxlength="40"
+             placeholder="We text your preview link here">
+    </label>
+    <label>Google Maps link (optional)
+      <input class="input" name="maps_url" value="{{ prefill_maps or '' }}" maxlength="500">
+    </label>
+    <fieldset class="plans">
+      <legend class="small muted">Plan</legend>
+      <label class="radio"><input type="radio" name="plan" value="one-time"{{ " checked" if plan != "monthly" }}> Backlog cleanup, $29 one time</label>
+      <label class="radio"><input type="radio" name="plan" value="monthly"{{ " checked" if plan == "monthly" }}> Ongoing, $19/month (waitlist)</label>
+    </fieldset>
+    <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+    <button class="btn btn-dark btn-block">Text me my preview</button>
+  </form>
+  {% endif %}
+</section>
+
+<footer class="footer muted small">
+  Built at c0mpiled-15 by Penn State students. Replies written on Luminal. · <a class="muted" href="/admin">Admin</a>
+</footer>
+{% endblock %}

@@ -10,6 +10,7 @@
       <a class="nav-item is-active" href="#overview">Overview</a>
       <a class="nav-item" href="#businesses">Businesses</a>
       <a class="nav-item" href="#orders">Orders</a>
+      <a class="nav-item" href="#requests">Requests</a>
     </nav>
   </aside>
 
@@ -121,6 +122,29 @@
       </div>
 
       <aside class="admin-side">
+        <section class="card" id="requests">
+          <div class="card-title">
+            <h2>Requests</h2>
+            <span class="pill tone-blue">{{ leads|length }} new</span>
+          </div>
+          {% if leads %}
+          <ul class="todo">
+          {% for q in leads %}
+            <li>
+              <div>
+                <p class="strong">{{ q.name }}</p>
+                <p class="muted small">{{ q.phone }} · {{ "$19/mo waitlist" if q.plan == "monthly" else "$29 one time" }} · {{ q.when }}</p>
+                {% if q.maps_link %}<p class="small"><a href="{{ q.maps_link }}" target="_blank" rel="noopener noreferrer">Maps link</a></p>{% endif %}
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" data-copy-value="{{ q.phone }}">Copy</button>
+            </li>
+          {% endfor %}
+          </ul>
+          {% else %}
+          <p class="empty muted">No requests yet. They show up when someone asks for a preview on the home page.</p>
+          {% endif %}
+        </section>
+
         <section class="card">
           <div class="card-title"><h2>Do these first</h2></div>
           {% if first %}
