@@ -5,7 +5,28 @@
 <div class="center">
   <div class="card thanks">
     <h1 class="title">Payment received.</h1>
-    <p class="muted">We're unlocking your replies now, check your texts in a few minutes.</p>
+    <p class="muted" id="thanks-text">We're unlocking your replies now, check your texts in a few minutes.</p>
+    <a class="btn btn-primary btn-block btn-big" id="open-replies" href="#" hidden>Open my replies</a>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // The preview page saved {slug, token} when the owner tapped Unlock. Stripe sends them here after
+  // paying: mark it paid for the preview page's "unlocking now" band, and link back to their replies.
+  var KEY = "replydesk:unlock";
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
+  if (!saved || !saved.slug || !saved.token || Date.now() - (saved.at || 0) > 24 * 3600 * 1000) return;
+  saved.paidAt = Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {}
+  var link = document.getElementById("open-replies");
+  link.href = "/p/" + encodeURIComponent(saved.slug) + "?t=" + encodeURIComponent(saved.token);
+  link.hidden = false;
+  document.getElementById("thanks-text").textContent =
+    "Your replies unlock within a few minutes. This page will take you there.";
+})();
+</script>
 {% endblock %}

@@ -194,6 +194,12 @@ def preview(request: Request, slug: str, t: str = ""):
         **stats(reviews)})
 
 
+@app.get("/p/{slug}/status.json")
+def preview_status(slug: str, t: str = ""):
+    """Polled by the preview page after payment; flips to paid once the business is marked paid."""
+    return {"paid": bool(business_for(slug, t).get("paid"))}
+
+
 @app.get("/full/{slug}")
 def full(request: Request, slug: str, t: str = ""):
     biz = business_for(slug, t)

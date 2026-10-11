@@ -2,6 +2,10 @@
 {% block title %}{{ biz.name }}: your review replies{% endblock %}
 {% block body_class %}has-bar{% endblock %}
 
+{% block top %}
+<p class="paid-band" id="paid-band" hidden>Payment received, unlocking now</p>
+{% endblock %}
+
 {% block content %}
 <section class="reviews">
 {% for c in cards %}
@@ -27,7 +31,7 @@
     <div class="locked">
       <p class="reply-text blurred" aria-hidden="true">{{ c.reply }}</p>
       <div class="unlock">
-        <a class="btn btn-dark" href="{{ pay_url }}">Unlock all {{ written }} replies for ${{ price }}</a>
+        <a class="btn btn-dark" href="{{ pay_url }}" data-unlock>Unlock all {{ written }} replies for ${{ price }}</a>
       </div>
     </div>
     {% else %}
@@ -43,6 +47,34 @@
 
 {% block after_main %}
 <div class="sticky-bar">
-  <a class="btn btn-dark btn-block" href="{{ pay_url }}">Unlock all for ${{ price }}</a>
+  <a class="btn btn-dark btn-block" href="{{ pay_url }}" data-unlock>Unlock all for ${{ price }}</a>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var KEY = "replydesk:unlock";
+  var slug = {{ biz._id|tojson }};
+  var token = {{ biz.preview_token|tojson }};
+
+  // Before following any Unlock link, remember whose replies these are, for the thanks page.
+  document.addEventListener("click", function (event) {
+    if (!event.target.closest("[data-unlock]")) return;
+    try { localStorage.setItem(KEY, JSON.stringify({slug: slug, token: token, at: Date.now()})); } catch (e) {}
+  });
+
+  // Back from the thanks page after paying: say so, and reload (to /full) once the payment is marked.
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) {}
+  if (!saved || saved.slug !== slug || !saved.paidAt || Date.now() - saved.paidAt > 6 * 3600 * 1000) return;
+  document.getElementById("paid-band").hidden = false;
+  setInterval(function () {
+    fetch("/p/" + encodeURIComponent(slug) + "/status.json?t=" + encodeURIComponent(token), {cache: "no-store"})
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (status) { if (status && status.paid) window.location.reload(); })
+      .catch(function () {});
+  }, 10000);
+})();
+</script>
 {% endblock %}
