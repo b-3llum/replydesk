@@ -43,11 +43,17 @@
       <div class="stat-row">
         <span class="stat-number">{% if oldest_days is none %}&mdash;{% else %}{{ oldest_days }} {{ "day" if oldest_days == 1 else "days" }}{% endif %}</span>
       </div>
-      <p class="muted small">Google recommends replying within a week.</p>
+      <p class="muted small">Most customers expect a reply within a week.</p>
     </div>
   </section>
 
-  <p class="info-band">9 out of 10 one-star reviews of small businesses never get a reply. Yours are below.</p>
+  {% if low_unanswered %}
+  <p class="info-band">{{ low_unanswered }} of your 1-2 star reviews {{ "has" if low_unanswered == 1 else "have" }} no reply. Each one is a customer other people are reading.</p>
+  {% elif unanswered %}
+  <p class="info-band">{{ unanswered }} of your reviews {{ "has" if unanswered == 1 else "have" }} no reply. Each one is a customer other people are reading.</p>
+  {% else %}
+  <p class="info-band">Every one of your reviews has a reply. Nice work.</p>
+  {% endif %}
 {% endif %}
 
 {% block content %}{% endblock %}

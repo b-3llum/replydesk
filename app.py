@@ -87,6 +87,7 @@ def stats(reviews):
     dates = [d for d in (parse_date(r.get("date")) for r in unanswered) if d]
     return {
         "unanswered": len(unanswered),
+        "low_unanswered": sum(1 for r in unanswered if (r.get("stars") or 0) <= 2),
         "written": len(ready_reviews(reviews)),
         "oldest_days": (datetime.now(timezone.utc) - min(dates)).days if dates else None,
     }
