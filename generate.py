@@ -237,7 +237,7 @@ def diversify(slug):
     text = {r["_id"]: r["reply"] for r in rows}
     written = [r for r in rows if r.get("model") != "template"]
     low_ids = [r["_id"] for r in rows if r["stars"] <= 2]
-    need = min(CALL_LINE_PHRASINGS, len(low_ids))
+    need = min(CALL_LINE_PHRASINGS, len(low_ids)) if biz.get("phone") else 0  # no phone, no call line
 
     def call_wordings():
         return len({call_key(text[i]) for i in low_ids} - {None})
@@ -269,7 +269,26 @@ def diversify(slug):
         touched.add(r["_id"])
         if _rewrite(biz, r, text, ["call"], low_ids):
             fixed["call"] += 1
+    fixed["trimmed"] += _trim_twin_closings(biz, written, text)
     return fixed
+
+
+def _trim_twin_closings(biz, written, text):
+    """Last resort for twins the rewrite could not separate: drop the repeated last sentence when
+    what is left still follows every rule and ends uniquely. Mechanical, no LLM call."""
+    phone, trimmed = biz.get("phone") or "", 0
+    for r in written:
+        rid = r["_id"]
+        parts = _sentences(text[rid])
+        if len(parts) < 2 or closing_key(text[rid]) not in _taken(text, rid, closing_key):
+            continue
+        shorter = " ".join(parts[:-1])
+        if problems(shorter, r, phone) or closing_key(shorter) in _taken(text, rid, closing_key):
+            continue
+        text[rid] = shorter
+        store.save_reply(rid, shorter, r.get("model"), r.get("tokens_in") or 0, r.get("tokens_out") or 0)
+        trimmed += 1
+    return trimmed
 
 
 def _diversify_safe(slug):
@@ -282,6 +301,7 @@ def _diversify_safe(slug):
 
 def diversity_report(slug):
     """What is still repeated for one business (LLM replies only; templates may repeat each other)."""
+    has_phone = bool((store.get_business(slug) or {}).get("phone"))
     rows = [r for r in store.reviews_for(slug) if r.get("reply") and not r["owner_replied"]]
     text = {r["_id"]: r["reply"] for r in rows}
     written = [r["_id"] for r in rows if r.get("model") != "template"]
@@ -290,7 +310,7 @@ def diversity_report(slug):
         "openings_repeated": sum(1 for i in written if opening_key(text[i]) in _taken(text, i, opening_key)),
         "closings_repeated": sum(1 for i in written if closing_key(text[i]) in _taken(text, i, closing_key)),
         "call_wordings": len({call_key(text[i]) for i in low_ids} - {None}),
-        "call_wordings_needed": min(CALL_LINE_PHRASINGS, len(low_ids)),
+        "call_wordings_needed": min(CALL_LINE_PHRASINGS, len(low_ids)) if has_phone else 0,
     }
 
 
@@ -363,7 +383,8 @@ def _diversity_pass(slugs, started):
     with ThreadPoolExecutor(max_workers=min(10, len(slugs))) as pool:
         fixed = sum(pool.map(_diversify_safe, slugs), Counter())
     left = [diversity_report(x) for x in slugs]
-    print(f"diversity: rewrote {fixed['opening']} openings, {fixed['closing']} closings, {fixed['call']} call lines "
+    print(f"diversity: rewrote {fixed['opening']} openings, {fixed['closing']} closings, {fixed['call']} call lines, "
+          f"trimmed {fixed['trimmed']} repeated last sentences "
           f"| still repeated: {sum(d['openings_repeated'] for d in left)} openings, "
           f"{sum(d['closings_repeated'] for d in left)} closings | businesses short on call-line wordings: "
           f"{sum(1 for d in left if d['call_wordings'] < d['call_wordings_needed'])} "
