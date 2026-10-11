@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+{% block title %}{{ biz.name }}: Reply Studio{% endblock %}
+{% block body_class %}studio{% endblock %}
+
+{% block content %}
+{# Reply Studio, desktop only: the reviews that need a reply on the left, the selected review in the
+   middle, the reply composer and its quality check on the right. Each review loads with a small fetch
+   (see the script at the bottom). Styles: the "Reply Studio (desktop)" section of style.css. #}
+{% macro stars(n) -%}
+<span class="s-stars" role="img" aria-label="{{ n }} out of 5 stars">
+{%- for i in range(5) %}<span class="{{ 'is-on' if i < n else 'is-off' }}">★</span>{% endfor -%}
+</span>
+{%- endmacro %}
+{% macro gmark(size=14) -%}
+<svg class="s-gmark" width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M17.66 6.34A8 8 0 1 0 20 12h-7.6" fill="none" stroke="#4285F4" stroke-width="3.4"/></svg>
+{%- endmacro %}
+{% set filters = [("all", "All", counts.all), ("negative", "Negative", counts.negative),
+                  ("positive", "Positive", counts.positive), ("neutral", "Unanswered", counts.neutral)] %}
+{% set biz_meta = [biz.category, biz.address] | select | join(" · ") %}
+<div class="s-app">
+  <header class="s-top">
+    <p class="s-brand"><span class="s-brand-dot" aria-hidden="true"></span>ReplyDesk<span class="s-brand-page">Reply Studio</span></p>
+    <span class="s-top-divider" aria-hidden="true"></span>
+    <div class="s-top-biz">
+      <h1 class="s-biz-name">{{ biz.name }}</h1>
+      {% if biz_meta %}<p class="s-biz-meta">{{ biz_meta }}</p>{% endif %}
+    </div>
+  </header>
+
+  <div class="s-cols">
+    <section class="s-col s-col-left" aria-labelledby="queue-title">
+      <div class="s-card s-queue">
+        <div class="s-queue-head">
+          <h2 class="s-queue-title" id="queue-title">Reviews needing action ({{ counts.all }})</h2>
+          <div class="s-filters" role="group" aria-label="Filter reviews">
+          {% for key, label, n in filters %}
+            <button type="button" class="s-filter{{ ' is-active' if loop.first }}" data-filter="{{ key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ label }}<span class="s-count">{{ n }}</span></button>
+          {% endfor %}
+          </div>
+        </div>
+        {% if rows %}
+        <ul class="s-list" id="queue">
+        {% for r in rows %}
+          <li>
+            <button type="button" class="s-row" data-id="{{ r.id }}" data-kind="{{ r.kind }}">
+              <span class="s-avatar" aria-hidden="true">{{ r.initial }}</span>
+              <span class="s-row-main">
+                <span class="s-row-line">
+                  <span class="s-row-name">{{ r.author }}</span>
+                  {% if r.date %}<span class="s-row-date">{{ r.date }}</span>{% endif %}
+                </span>
+                <span class="s-row-line">
+                  {{ stars(r.stars | int) }}
+                  {{ gmark(13) }}
+                  <span class="s-pill s-pill-{{ r.kind }}">{{ r.label }}</span>
+                </span>
+                <span class="s-row-snippet">{{ r.snippet }}</span>
+              </span>
+            </button>
+          </li>
+        {% endfor %}
+        </ul>
+        <p class="s-empty" id="filter-empty" hidden>No reviews in this group.</p>
+        {% else %}
+        <p class="s-empty">Every review has a reply. Nothing needs action right now.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="s-col s-col-mid" id="mid" aria-label="Selected review">
+      <div class="s-card s-placeholder" id="mid-placeholder">
+        {% if rows %}Pick a review on the left to read it here.{% else %}No reviews need a reply right now.{% endif %}
+      </div>
+      <article class="s-card s-review" id="review" hidden>
+        <header class="s-review-head">
+          <span class="s-avatar s-avatar-lg" id="rv-initial" aria-hidden="true"></span>
+          <div class="s-review-who">
+            <h2 class="s-review-name" id="rv-author"></h2>
+            <div class="s-review-meta">
+              <span class="s-badge">{{ gmark(14) }}<span id="rv-source">Google Reviews</span></span>
+              <span class="s-stars s-stars-lg" id="rv-stars" role="img"></span>
+              <span class="s-date" id="rv-date"></span>
+            </div>
+          </div>
+          <span class="s-pill" id="rv-label"></span>
+        </header>
+        <p class="s-review-text" id="rv-text"></p>
+        <p class="s-section-label">Topics</p>
+        <div class="s-tags" id="rv-tags" aria-live="polite"></div>
+      </article>
+    </section>
+
+    <section class="s-col s-col-right" id="right" aria-label="Your reply">
+      <div class="s-card s-panel">
+        <div class="s-card-head">
+          <div>
+            <h2 class="s-card-title">AI Reply Composer</h2>
+            <p class="s-card-sub">Pick a tone, then Regenerate. Edit freely.</p>
+          </div>
+          <span class="s-words" id="words" title="The best replies are 25 to 60 words"></span>
+        </div>
+        <div class="s-tones" role="group" aria-label="Tone">
+          <button type="button" class="s-tone" data-tone="empathetic" aria-pressed="false" disabled>Empathetic</button>
+          <button type="button" class="s-tone" data-tone="professional" aria-pressed="false" disabled>Professional</button>
+          <button type="button" class="s-tone" data-tone="warm" aria-pressed="false" disabled>Warm</button>
+          <button type="button" class="s-tone" data-tone="concise" aria-pressed="false" disabled>Concise</button>
+        </div>
+        <textarea class="s-reply" id="reply" rows="7" aria-label="Reply text" spellcheck="true" disabled></textarea>
+        <div class="s-actions">
+          <button type="button" class="s-btn" id="regenerate" disabled>Regenerate</button>
+          <button type="button" class="s-btn" id="shorten" disabled>Shorten</button>
+          <button type="button" class="s-btn" id="copy" disabled>Copy</button>
+        </div>
+        <p class="s-error" id="compose-error" role="alert" hidden></p>
+      </div>
+
+      <div class="s-card s-panel">
+        <div class="s-card-head">
+          <div>
+            <h2 class="s-card-title">Reply Quality Check</h2>
+            <p class="s-card-sub">Updates as you edit</p>
+          </div>
+          <p class="s-score"><span class="s-score-num" id="score">&ndash;</span><span class="s-score-max">/100</span></p>
+        </div>
+        <div class="s-bars" id="bars"></div>
+        <div class="s-advice" id="advice" hidden>
+          <p class="s-advice-title" id="verdict"></p>
+          <ul class="s-tips" id="tips"></ul>
+        </div>
+      </div>
+
+      <div class="s-copybar">
+        <button type="button" class="s-btn s-btn-primary" id="copy-main" disabled>Copy reply</button>
+        <p class="s-copy-note">We never post to Google. You paste it yourself.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="s-narrow">
+  <div class="s-card s-narrow-card">
+    <p class="s-brand"><span class="s-brand-dot" aria-hidden="true"></span>ReplyDesk</p>
+    <p class="s-narrow-text">Reply Studio is built for desktop screens. Open this link on a laptop.</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var SLUG = {{ biz._id|tojson }};
+  var TOKEN = {{ token|tojson }};
+  var TONES = ["empathetic", "professional", "warm", "concise"];
+  var TAGS_DELAY = 500;     // ms a review stays open before its topics are fetched (an LLM call the first time)
+  var QUALITY_DELAY = 400;  // ms after the last keystroke before the reply is re-scored
+  var EMPTY_BARS = [{label: "Personalization", value: 0}, {label: "Professionalism", value: 0},
+                    {label: "Complaint addressed", value: 0}, {label: "Policy safety", value: 0}];
+  var TIP_ORDER = ["specific", "name", "outcome", "length", "clean"];
+  var TIPS = {
+    specific: "Mention something specific from their review.",
+    name: "Use the reviewer's first name.",
+    length: "Keep it between 25 and 60 words.",
+    clean: "Skip stock phrases (valued, feedback, strive), emojis and extra exclamation marks."
+  };
+  var OUTCOME_TIPS = {
+    negative: "Give your phone number and offer to make it right.",
+    positive: "Invite them back.",
+    neutral: "Invite them back or offer to make it right."
+  };
+  // A rating-only review has no text to mention, so its "specific" check can never pass (the score
+  // follows the rubric as is, and Regenerate is told not to invent details): say so, don't ask for it.
+  var RATING_ONLY_TIP = "Rating only, no written review: there is nothing specific to mention, so this check can't pass.";
+
+  function byId(id) { return document.getElementById(id); }
+  function all(selector) { return Array.prototype.slice.call(document.querySelectorAll(selector)); }
+
+  var rowEls = all(".s-row");
+  var filterEls = all(".s-filter");
+  var toneEls = all(".s-tone");
+  var el = {
+    mid: byId("mid"), right: byId("right"), placeholder: byId("mid-placeholder"), review: byId("review"),
+    initial: byId("rv-initial"), author: byId("rv-author"), source: byId("rv-source"), stars: byId("rv-stars"),
+    date: byId("rv-date"), label: byId("rv-label"), text: byId("rv-text"), tags: byId("rv-tags"),
+    reply: byId("reply"), words: byId("words"), regenerate: byId("regenerate"), shorten: byId("shorten"),
+    copy: byId("copy"), copyMain: byId("copy-main"), error: byId("compose-error"),
+    score: byId("score"), bars: byId("bars"), advice: byId("advice"), verdict: byId("verdict"), tips: byId("tips"),
+    queue: byId("queue"), filterEmpty: byId("filter-empty")
+  };
+
+  // Review id -> {id, data (the review JSON), text (this tab's draft), tone, quality, tags, error}.
+  // Drafts live here only: switching reviews keeps them, a page reload starts from the saved replies.
+  var reviews = {};
+  var current = null;    // id of the selected review
+  var loadingId = null;  // id whose review JSON is on its way
+  var busyId = null;     // id with a Regenerate or Shorten running; one at a time, the LLM key is shared
+
+  function api(id, path) {
+    return "/studio/" + encodeURIComponent(SLUG) + "/review/" + encodeURIComponent(id) + path +
+      "?t=" + encodeURIComponent(TOKEN);
+  }
+
+  // GET (or POST body as JSON) -> the parsed answer; rejects with err.status on an error status.
+  function request(url, body) {
+    var options = {cache: "no-store", headers: {"Accept": "application/json"}};
+    if (body !== undefined) {
+      options.method = "POST";
+      options.headers["Content-Type"] = "application/json";
+      options.body = JSON.stringify(body);
+    }
+    return fetch(url, options).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (response.ok) return data;
+        var err = new Error((data && data.error) || "HTTP " + response.status);
+        err.status = response.status;
+        throw err;
+      });
+    });
+  }
+
+  function node(tag, className, text) {
+    var n = document.createElement(tag);
+    if (className) n.className = className;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  // ------------------------------------------------------------ selecting a review
+
+  function select(row) {
+    var id = row.dataset.id;
+    rowEls.forEach(function (other) {
+      other.classList.toggle("is-active", other === row);
+      if (other === row) other.setAttribute("aria-current", "true");
+      else other.removeAttribute("aria-current");
+    });
+    current = id;
+    var entry = reviews[id];
+    if (entry) {
+      loadingId = null;
+      entry.tagsFailed = false;  // a failed topic lookup gets another try each time the review is opened
+      show(entry);
+      return;
+    }
+    loadingId = id;
+    setLoading(true);
+    request(api(id, ".json")).then(function (data) {
+      reviews[id] = {id: id, data: data, text: data.reply || "", tone: data.tone, quality: data.quality,
+                     tags: data.tags};
+      if (current !== id) return;  // they clicked on; it is cached for when they come back
+      loadingId = null;
+      show(reviews[id]);
+    }).catch(function (err) {
+      if (current !== id) return;
+      if (window.console) console.error(err);
+      loadingId = null;
+      showLoadError(err);
+    });
+  }
+
+  function setLoading(on) {
+    el.mid.classList.toggle("is-loading", on);
+    el.right.classList.toggle("is-loading", on);
+    if (on && el.review.hidden) {
+      el.placeholder.textContent = "Loading the review...";
+      el.placeholder.hidden = false;
+    }
+    syncControls();
+  }
+
+  function show(entry) {
+    var d = entry.data;
+    setLoading(false);
+    el.placeholder.hidden = true;
+    el.review.hidden = false;
+    el.initial.textContent = d.initial || "?";
+    el.author.textContent = d.author || "Google user";
+    el.source.textContent = d.source || "Google Reviews";
+    fillStars(el.stars, d.stars);
+    el.date.textContent = d.date || "";
+    el.date.hidden = !d.date;
+    el.label.textContent = d.label || "";
+    el.label.className = "s-pill s-pill-" + (d.kind || "neutral");
+    el.text.textContent = d.text || "Rated only, no written review.";
+    el.text.classList.toggle("is-empty", !d.text);
+    el.mid.scrollTop = 0;
+    renderTags(entry);
+
+    el.reply.value = entry.text;
+    setTone(entry.tone);
+    renderQuality(entry);
+    if (entry.error) showError(entry.error);
+    else hideError();
+    syncControls();
+    renderWords();
+  }
+
+  function showLoadError(err) {
+    setLoading(false);
+    el.review.hidden = true;
+    el.placeholder.hidden = false;
+    el.placeholder.textContent = err && (err.status === 403 || err.status === 404)
+      ? "This review is not available on this link. Reload the page from the link we sent you."
+      : "Could not load this review. Click it again to retry.";
+    el.reply.value = "";
+    renderQuality(null);
+    hideError();
+    syncControls();
+    renderWords();
+  }
+
+  function fillStars(box, n) {
+    n = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
+    box.textContent = "";
+    for (var i = 0; i < 5; i++) box.appendChild(node("span", i < n ? "is-on" : "is-off", "★"));
+    box.setAttribute("aria-label", n + " out of 5 stars");
+  }
+
+  // Buttons and the textarea follow the state: nothing works until a review is loaded, and
+  // Regenerate, Shorten and the tone tabs wait while a rewrite is running.
+  function syncControls() {
+    var ready = !!reviews[current] && loadingId === null;
+    var busy = busyId !== null;
+    el.reply.disabled = !ready;
+    el.reply.readOnly = busy && busyId === current;
+    el.regenerate.disabled = !ready || busy;
+    el.shorten.disabled = !ready || busy;
+    toneEls.forEach(function (tab) { tab.disabled = !ready || busy; });
+    el.copy.disabled = !ready;
+    el.copyMain.disabled = !ready;
+  }
+
+  // ------------------------------------------------------------ topics (tag chips)
+
+  function renderTags(entry) {
+    var box = el.tags;
+    box.textContent = "";
+    if (!entry.data.text) return box.appendChild(node("span", "s-note", "No topics for a rating-only review."));
+    if (entry.tagsFailed) return box.appendChild(node("span", "s-note", "Topics are not available right now."));
+    if (!Array.isArray(entry.tags)) {
+      box.appendChild(node("span", "s-note", "Finding topics..."));
+      loadTags(entry);
+      return;
+    }
+    var shown = 0;
+    entry.tags.forEach(function (tag) {
+      var label = typeof tag === "string" ? tag : tag && tag.label;
+      if (!label) return;
+      var kind = tag && tag.kind === "problem" ? "problem" : "topic";
+      box.appendChild(node("span", "s-tag s-tag-" + kind, label));
+      shown += 1;
+    });
+    if (!shown) box.appendChild(node("span", "s-note", "No clear topics in this review."));
+  }
+
+  // The first open of a review costs one LLM call (the server caches the tags on the review),
+  // so it waits TAGS_DELAY and skips reviews that were only clicked past. An empty list for a
+  // written review means the extraction failed (the server saves nothing then): the next open retries.
+  function loadTags(entry) {
+    if (entry.tagsTimer || entry.tagsPending) return;
+    var id = entry.id;
+    entry.tagsTimer = setTimeout(function () {
+      entry.tagsTimer = null;
+      if (current !== id) return;
+      entry.tagsPending = true;
+      request(api(id, "/tags.json")).then(function (data) {
+        if (Array.isArray(data.tags) && data.tags.length) entry.tags = data.tags;
+        else entry.tagsFailed = true;
+      }, function () {
+        entry.tagsFailed = true;
+      }).then(function () {
+        entry.tagsPending = false;
+        if (current === id) renderTags(entry);
+      });
+    }, TAGS_DELAY);
+  }
+
+  // ------------------------------------------------------------ composer
+
+  function setTone(tone) {
+    if (TONES.indexOf(tone) < 0) tone = "professional";
+    var entry = reviews[current];
+    if (entry) entry.tone = tone;
+    toneEls.forEach(function (tab) {
+      var on = tab.dataset.tone === tone;
+      tab.classList.toggle("is-active", on);
+      tab.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function compose(action, button) {
+    var entry = reviews[current];
+    if (!entry || busyId !== null || loadingId !== null) return;
+    var id = entry.id;
+    var label = button.textContent;
+    busyId = id;
+    clearTimeout(entry.qualityTimer);
+    entry.error = null;
+    hideError();
+    button.textContent = action === "shorten" ? "Shortening..." : "Regenerating...";
+    button.classList.add("is-busy");
+    syncControls();
+    request(api(id, "/compose.json"), {action: action, tone: entry.tone, text: entry.text}).then(function (data) {
+      if (typeof data.reply !== "string" || !data.reply.trim()) throw new Error("no reply in the answer");
+      entry.text = data.reply;
+      entry.qualitySeq = (entry.qualitySeq || 0) + 1;  // drops any older quality answer still on its way
+      if (data.quality) entry.quality = data.quality;
+      else rescore(id);
+      if (current === id) {
+        el.reply.value = entry.text;
+        renderWords();
+        renderQuality(entry);
+      }
+    }).catch(function (err) {
+      entry.error = composeMessage(action, err);
+      if (current === id) showError(entry.error);
+    }).then(function () {
+      busyId = null;
+      button.textContent = label;
+      button.classList.remove("is-busy");
+      syncControls();
+    });
+  }
+
+  function composeMessage(action, err) {
+    if (err && err.status === 403) return "This link is no longer valid. Reload the page from the link we sent you.";
+    return "Could not " + (action === "shorten" ? "shorten" : "regenerate") +
+      " the reply right now. Your text is unchanged. Try again in a moment.";
+  }
+
+  function showError(message) {
+    el.error.textContent = message;
+    el.error.hidden = false;
+  }
+
+  function hideError() {
+    el.error.textContent = "";
+    el.error.hidden = true;
+  }
+
+  // Same word rule as the quality check: runs of letters, digits and apostrophes.
+  function renderWords() {
+    if (!reviews[current] || loadingId !== null) {
+      el.words.textContent = "";
+      return;
+    }
+    var n = (el.reply.value.match(/[A-Za-z0-9’']+/g) || []).length;
+    el.words.textContent = n === 1 ? "1 word" : n + " words";
+    el.words.classList.toggle("is-off", n < 25 || n > 60);
+  }
+
+  // ------------------------------------------------------------ quality check
+
+  function rescore(id) {
+    var entry = reviews[id];
+    if (!entry) return;
+    var seq = entry.qualitySeq = (entry.qualitySeq || 0) + 1;
+    request(api(id, "/quality.json"), {text: entry.text}).then(function (data) {
+      if (seq !== entry.qualitySeq || !data.quality) return;  // a newer text was scored since
+      entry.quality = data.quality;
+      if (current === id) renderQuality(entry);
+    }).catch(function () {});  // the old score stays up; the next edit tries again
+  }
+
+  function renderQuality(entry) {
+    var q = entry && entry.quality;
+    el.bars.textContent = "";
+    el.tips.textContent = "";
+    ((q && q.bars) || EMPTY_BARS).forEach(function (bar) {
+      var value = Math.max(0, Math.min(100, Math.round(Number(bar.value) || 0)));
+      var top = node("div", "s-bar-top");
+      top.appendChild(node("span", "s-bar-label", bar.label || bar.key || ""));
+      top.appendChild(node("span", "s-bar-value", q ? String(value) : ""));
+      var fill = node("div", "s-bar-fill");
+      fill.style.width = value + "%";
+      var track = node("div", "s-bar-track");
+      track.appendChild(fill);
+      var row = node("div", "s-bar");
+      row.appendChild(top);
+      row.appendChild(track);
+      el.bars.appendChild(row);
+    });
+    if (!q) {
+      el.score.textContent = "–";
+      el.advice.hidden = true;
+      return;
+    }
+    el.score.textContent = String(Math.max(0, Math.min(100, Math.round(Number(q.score) || 0))));
+    // Under the bars: "All checks pass", or what to fix, one line per failed rubric check.
+    var checks = q.checks || null;
+    var ratingOnly = !!entry.data && !entry.data.text;
+    var failed = checks ? TIP_ORDER.filter(function (key) { return checks[key] === false; }) : [];
+    var fixable = failed.filter(function (key) { return !(ratingOnly && key === "specific"); });
+    fixable.forEach(function (key) {
+      var kind = entry.data && entry.data.kind;
+      el.tips.appendChild(node("li", "", key === "outcome" ? OUTCOME_TIPS[kind] || OUTCOME_TIPS.neutral : TIPS[key]));
+    });
+    if (fixable.length < failed.length) el.tips.appendChild(node("li", "", RATING_ONLY_TIP));
+    el.advice.hidden = !checks;
+    el.advice.classList.toggle("is-pass", fixable.length === 0);
+    el.verdict.textContent = !failed.length ? "All checks pass. Ready to paste."
+      : !fixable.length ? "Ready to paste."
+      : fixable.length === 1 ? "1 thing to improve" : fixable.length + " things to improve";
+    el.tips.hidden = failed.length === 0;
+  }
+
+  // ------------------------------------------------------------ events
+
+  rowEls.forEach(function (row) {
+    row.addEventListener("click", function () { select(row); });
+  });
+
+  // Up and down arrows walk the visible rows.
+  if (el.queue) {
+    el.queue.addEventListener("keydown", function (event) {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      var visible = rowEls.filter(function (row) { return !row.parentNode.hidden; });
+      var i = visible.indexOf(document.activeElement);
+      var next = i < 0 ? null : visible[i + (event.key === "ArrowDown" ? 1 : -1)];
+      if (!next) return;
+      event.preventDefault();
+      next.focus();
+      select(next);
+    });
+  }
+
+  // Filter chips: All / Negative / Positive / Unanswered (the 3-star rows). When the open review
+  // drops out of the filter, the first row that is left opens instead.
+  filterEls.forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      var kind = chip.dataset.filter;
+      var first = null;
+      filterEls.forEach(function (other) {
+        other.classList.toggle("is-active", other === chip);
+        other.setAttribute("aria-pressed", other === chip ? "true" : "false");
+      });
+      rowEls.forEach(function (row) {
+        var visible = kind === "all" || row.dataset.kind === kind;
+        row.parentNode.hidden = !visible;
+        if (visible && !first) first = row;
+      });
+      if (el.filterEmpty) el.filterEmpty.hidden = !!first;
+      var active = rowEls.filter(function (row) { return row.classList.contains("is-active"); })[0];
+      if (first && (!active || active.parentNode.hidden)) {
+        select(first);
+        first.scrollIntoView({block: "nearest"});
+      }
+    });
+  });
+
+  toneEls.forEach(function (tab) {
+    tab.addEventListener("click", function () { setTone(tab.dataset.tone); });
+  });
+
+  el.regenerate.addEventListener("click", function () { compose("regenerate", el.regenerate); });
+  el.shorten.addEventListener("click", function () { compose("shorten", el.shorten); });
+  el.copy.addEventListener("click", function () { copyText(el.reply.value.trim(), el.copy); });
+  el.copyMain.addEventListener("click", function () { copyText(el.reply.value.trim(), el.copyMain); });
+
+  el.reply.addEventListener("input", function () {
+    var entry = reviews[current];
+    if (!entry || loadingId !== null) return;
+    entry.text = el.reply.value;
+    if (entry.error) {
+      entry.error = null;
+      hideError();
+    }
+    renderWords();
+    clearTimeout(entry.qualityTimer);
+    entry.qualityTimer = setTimeout(function () { rescore(entry.id); }, QUALITY_DELAY);
+  });
+
+  // ------------------------------------------------------------ start
+
+  renderQuality(null);
+  syncControls();
+
+  // Open the first review once the three columns are on screen (narrow screens only get the
+  // "built for desktop" card, so they make no requests until the window is widened).
+  var started = false;
+  var desktop = window.matchMedia ? window.matchMedia("(min-width: 1100px)") : null;
+  function start() {
+    if (started || !rowEls.length || (desktop && !desktop.matches)) return;
+    started = true;
+    select(rowEls[0]);
+  }
+  start();
+  if (desktop && desktop.addEventListener) desktop.addEventListener("change", start);
+  else if (desktop && desktop.addListener) desktop.addListener(start);
+})();
+</script>
+{% endblock %}
