@@ -390,6 +390,18 @@ class JsonStore:
 
         self._mutate(apply)
 
+    def save_tags(self, review_id, tags):
+        tags = copy.deepcopy(list(tags))
+
+        def apply(data):
+            review = data["reviews"].get(review_id)
+            if review is None:
+                raise KeyError(f"unknown review {review_id!r}")
+            review["tags"] = tags
+            return None, True
+
+        self._mutate(apply)
+
     def mark_paid(self, slug, method="stripe", amount=config.PRICE_USD):
         order = {"_id": secrets.token_hex(12), "business_id": slug, "amount": amount,
                  "method": method, "paid_at": _now()}
@@ -539,6 +551,11 @@ class MongoStore:
         if result.matched_count == 0:
             raise KeyError(f"unknown review {review_id!r}")
 
+    def save_tags(self, review_id, tags):
+        result = self.db.reviews.update_one({"_id": review_id}, {"$set": {"tags": list(tags)}})
+        if result.matched_count == 0:
+            raise KeyError(f"unknown review {review_id!r}")
+
     def mark_paid(self, slug, method="stripe", amount=config.PRICE_USD):
         # Only one caller can flip paid, so double clicks can't create two orders.
         result = self.db.businesses.update_one(
@@ -654,6 +671,12 @@ def pending_reviews(slug=None):
 
 def save_reply(review_id, reply, model, tokens_in, tokens_out):
     _store().save_reply(review_id, reply, model, tokens_in, tokens_out)
+
+
+def save_tags(review_id, tags):
+    """Cache the Reply Studio's tags on a review: [{"label": ..., "kind": "problem"|"topic"}, ...].
+    Re-scrapes keep them: upsert_reviews only sets the scraped keys. KeyError for an unknown review."""
+    _store().save_tags(review_id, tags)
 
 
 def mark_paid(slug, method="stripe", amount=config.PRICE_USD):

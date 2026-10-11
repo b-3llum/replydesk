@@ -417,3 +417,90 @@ def admin_export(key: str = ""):
     require_admin(key)
     return Response("﻿" + outreach.csv_text(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="replydesk-outreach.csv"'})
+
+
+# ---------------------------------------------------------------- Reply Studio
+#
+#     GET  /studio/{slug}?t=token                        desktop studio: list, review, AI reply composer
+#     GET  /studio/{slug}/review/{rid}.json?t=           the review, its saved reply, tags, default tone, quality
+#     GET  /studio/{slug}/review/{rid}/tags.json?t=      tags: one LLM call on first open, then cached on the review
+#     POST /studio/{slug}/review/{rid}/compose.json?t=   {"action", "tone", "text"} -> {"reply", "quality"}
+#     POST /studio/{slug}/review/{rid}/quality.json?t=   {"text"} -> {"quality"} (no LLM call)
+#
+# Nothing here posts to Google or overwrites a saved reply.
+
+import quality  # noqa: E402  (imported here so nothing above this section changes)
+import studio  # noqa: E402
+
+STUDIO_TEXT_CHARS = 2000  # the most reply text the composer endpoints read
+
+
+def studio_lookup(slug, rid, token):
+    """(business, review) for the studio's JSON endpoints: business_for's 404/403, then a 404 when
+    the review is not one of this business's."""
+    biz = business_for(slug, token)
+    review = next((r for r in store.reviews_for(slug) if r["_id"] == rid), None)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return biz, review
+
+
+async def studio_body(request):
+    """The JSON object a studio POST sends, or 400."""
+    try:
+        body = await request.json()
+    except ValueError:  # empty or not JSON
+        body = None
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="Send a JSON object")
+    return body
+
+
+def studio_text(body):
+    return str(body.get("text") or "")[:STUDIO_TEXT_CHARS]
+
+
+@app.get("/studio/{slug}")
+def studio_page(request: Request, slug: str, t: str = ""):
+    biz = business_for(slug, t)
+    rows = studio.rows(ready_reviews(store.reviews_for(slug)))
+    return templates.TemplateResponse(request, "studio.html", {
+        "biz": biz, "token": t, "rows": rows, "counts": studio.counts(rows)})
+
+
+@app.get("/studio/{slug}/review/{rid}.json")
+def studio_review(slug: str, rid: str, t: str = ""):
+    biz, review = studio_lookup(slug, rid, t)
+    return studio.detail(review, biz)
+
+
+@app.get("/studio/{slug}/review/{rid}/tags.json")
+def studio_tags(slug: str, rid: str, t: str = ""):
+    biz, review = studio_lookup(slug, rid, t)
+    return {"tags": studio.tags_for(biz, review)}
+
+
+@app.post("/studio/{slug}/review/{rid}/compose.json")
+async def studio_compose(request: Request, slug: str, rid: str, t: str = ""):
+    biz, review = await run_in_threadpool(studio_lookup, slug, rid, t)
+    body = await studio_body(request)
+    action = body.get("action")
+    if action not in studio.ACTIONS:
+        raise HTTPException(status_code=400, detail="action must be regenerate or shorten")
+    chosen = body.get("tone")
+    if not isinstance(chosen, str) or chosen not in studio.TONES:
+        chosen = studio.default_tone(int(review.get("stars") or 0))
+    try:
+        reply = await run_in_threadpool(studio.compose, biz, review, action, chosen, studio_text(body))
+    except llm.LLMError as exc:
+        print(f"studio compose failed on {slug}: {store.redact(exc)}", flush=True)
+        return JSONResponse({"error": "Couldn't write a new reply right now. Try again in a moment."},
+                            status_code=502)
+    return {"reply": reply, "quality": quality.report(review, biz, reply)}
+
+
+@app.post("/studio/{slug}/review/{rid}/quality.json")
+async def studio_quality(request: Request, slug: str, rid: str, t: str = ""):
+    biz, review = await run_in_threadpool(studio_lookup, slug, rid, t)
+    body = await studio_body(request)
+    return {"quality": quality.report(review, biz, studio_text(body))}
