@@ -52,7 +52,10 @@ def cmd_samples(args):
 def cmd_serve(args):
     import uvicorn
 
-    uvicorn.run("app:app", host="0.0.0.0", port=8000)
+    import config
+
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=args.reload,
+                reload_dirs=[str(config.BASE_DIR)] if args.reload else None)
 
 
 def cmd_outreach(args):
@@ -89,7 +92,9 @@ def build_parser():
     p.add_argument("--business", required=True, help="slug from run.py list")
     p.add_argument("--n", type=int, default=5, help="how many (default 5)")
     p.set_defaults(func=cmd_samples)
-    sub.add_parser("serve", help="web app on 0.0.0.0:8000 (preview, full set, thanks)").set_defaults(func=cmd_serve)
+    p = sub.add_parser("serve", help="web app on 0.0.0.0:8000 (preview, full set, thanks, admin)")
+    p.add_argument("--reload", action="store_true", help="restart automatically when code changes")
+    p.set_defaults(func=cmd_serve)
     sub.add_parser("outreach", help="write data/outreach.csv, most unanswered first").set_defaults(func=cmd_outreach)
     return parser
 
