@@ -6,6 +6,8 @@
     GET /full/{slug}?t=token     every reply, once the business has paid
     GET /thanks                  where Stripe sends the owner after paying
 """
+import hashlib
+import hmac
 import re
 import secrets
 import time
@@ -323,10 +325,24 @@ def evolution_card(wait=0.3):
         return None
 
 
-def require_admin(key):
+ADMIN_COOKIE = "rd_admin"
+ADMIN_COOKIE_DAYS = 7
+
+
+def _admin_cookie_value(key):
+    """What the remember-me cookie holds: derived from the key, never the key itself."""
+    return hmac.new(key.encode(), b"replydesk-admin-cookie", hashlib.sha256).hexdigest()
+
+
+def require_admin(key, request=None):
+    """The admin key, from ?key= or from the cookie of a browser that opened the admin before."""
     expected = config.get("ADMIN_KEY") or ""
-    if not expected or not secrets.compare_digest(key.encode(), expected.encode()):
-        raise HTTPException(status_code=403, detail="This admin link is not valid")
+    if expected and key and secrets.compare_digest(key.encode(), expected.encode()):
+        return expected
+    cookie = request.cookies.get(ADMIN_COOKIE, "") if request is not None else ""
+    if expected and cookie and secrets.compare_digest(cookie.encode(), _admin_cookie_value(expected).encode()):
+        return expected
+    raise HTTPException(status_code=403, detail="This admin link is not valid")
 
 
 def admin_numbers(s):
@@ -363,7 +379,11 @@ def back_to_admin(key):
 
 @app.get("/admin")
 def admin(request: Request, key: str = ""):
-    require_admin(key)
+    try:
+        key = require_admin(key, request)
+    except HTTPException:  # the home page's Admin link lands here: ask for the key, not an error
+        return templates.TemplateResponse(request, "admin_login.html", {"error": bool(key)},
+                                          status_code=403 if key else 200)
     stats_job = _pool.submit(store.stats)  # three Atlas round trips at once instead of in a row
     biz_job = _pool.submit(store.list_businesses)
     orders_job = _pool.submit(store.list_orders)
@@ -382,21 +402,25 @@ def admin(request: Request, key: str = ""):
              for q in requests_job.result() if q.get("status", "new") == "new"]
     today = today_job.result()
     today["cost"] = (today["tokens_in"] + today["tokens_out"]) / 1_000_000 * config.LLM_COST_PER_MILLION_TOKENS
-    return templates.TemplateResponse(request, "admin.html", {
+    response = templates.TemplateResponse(request, "admin.html", {
         "key": key, "stats": admin_numbers(stats_job.result()), "rows": rows, "first": first,
         "orders": orders, "price": config.PRICE_USD, "evo": evolution_card(), "leads": leads,
         "today": today, "model": config.get("LUMINAL_MODEL") or ""})
+    # Remember this browser, so the plain /admin link (home page footer) opens the panel next time.
+    response.set_cookie(ADMIN_COOKIE, _admin_cookie_value(key), max_age=ADMIN_COOKIE_DAYS * 86400, httponly=True,
+                        samesite="lax", secure=request.headers.get("x-forwarded-proto") == "https")
+    return response
 
 
 @app.get("/admin/stats.json")
-def admin_stats(key: str = ""):
-    require_admin(key)
+def admin_stats(request: Request, key: str = ""):
+    require_admin(key, request)
     return admin_numbers(cached_stats())
 
 
 @app.post("/admin/mark-paid/{slug}")
-def admin_mark_paid(slug: str, key: str = ""):
-    require_admin(key)
+def admin_mark_paid(request: Request, slug: str, key: str = ""):
+    key = require_admin(key, request)
     if store.get_business(slug) is None:
         raise HTTPException(status_code=404, detail="Not found")
     store.mark_paid(slug, "stripe", config.PRICE_USD)
@@ -404,8 +428,8 @@ def admin_mark_paid(slug: str, key: str = ""):
 
 
 @app.post("/admin/mark-texted/{slug}")
-def admin_mark_texted(slug: str, key: str = ""):
-    require_admin(key)
+def admin_mark_texted(request: Request, slug: str, key: str = ""):
+    key = require_admin(key, request)
     if store.get_business(slug) is None:
         raise HTTPException(status_code=404, detail="Not found")
     store.mark_texted(slug)
@@ -413,8 +437,8 @@ def admin_mark_texted(slug: str, key: str = ""):
 
 
 @app.get("/admin/export.csv")
-def admin_export(key: str = ""):
-    require_admin(key)
+def admin_export(request: Request, key: str = ""):
+    require_admin(key, request)
     return Response("﻿" + outreach.csv_text(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="replydesk-outreach.csv"'})
 

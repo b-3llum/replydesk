@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}ReplyDesk admin{% endblock %}
+
+{% block content %}
+<div class="center">
+  <form class="card thanks login" method="get" action="/admin">
+    <p class="logo-sm"><span class="logo-dot"></span>ReplyDesk</p>
+    <h1 class="title">Admin panel</h1>
+    <p class="muted">Enter the admin key. This browser stays signed in for 7 days.</p>
+    {% if error %}<p class="form-error">That key didn't work.</p>{% endif %}
+    <input class="input" type="password" name="key" placeholder="Admin key" aria-label="Admin key" required autofocus>
+    <button class="btn btn-primary btn-block">Open the admin panel</button>
+  </form>
+</div>
+{% endblock %}

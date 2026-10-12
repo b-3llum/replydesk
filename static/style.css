@@ -245,6 +245,8 @@ body.has-bar { padding-bottom: 108px; }
 /* Thanks and error pages */
 .center { display: flex; align-items: center; justify-content: center; min-height: 70vh; }
 .thanks { max-width: 420px; text-align: center; }
+.login { display: flex; flex-direction: column; gap: 12px; width: 100%; text-align: left; }
+.login .logo-sm { margin-bottom: 0; }
 
 /* Landing page (/) */
 .landing-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 32px; }
