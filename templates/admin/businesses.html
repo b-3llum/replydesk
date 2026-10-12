@@ -55,7 +55,7 @@
   <div class="table-wrap">
     <table class="table">
       <thead>
-        <tr><th>Business</th><th>Category</th><th class="num">Unanswered</th><th>Preview</th>
+        <tr><th>Business</th><th>Category</th><th class="num">Unanswered</th><th>Open</th>
             <th>Status</th><th>Paid</th><th aria-label="Actions"></th></tr>
       </thead>
       <tbody>
@@ -64,8 +64,14 @@
           <td><p class="strong">{{ r.name }}</p><p class="muted small">{{ r.phone or "no phone" }}</p></td>
           <td class="muted">{{ r.category }}</td>
           <td class="num strong{{ ' num-red' if r.unanswered > 30 }}">{{ r.unanswered }}</td>
-          <td><button type="button" class="btn btn-secondary btn-icon" data-copy-value="{{ r.preview_url }}"
-                      aria-label="Copy preview link" title="Copy preview link">{{ ic.icon("copy", 16) }}</button></td>
+          <td>
+            {# Copy keeps the public link for texts. Below it, the owner pages on this server in a new tab, as
+               small text links (as on Outreach): buttons made the table too wide for a 1280px screen. #}
+            <button type="button" class="btn btn-secondary btn-icon" data-copy-value="{{ r.preview_url }}"
+                    aria-label="Copy preview link" title="Copy preview link">{{ ic.icon("copy", 16) }}</button>
+            <p class="small nowrap"><a href="{{ r.preview_path }}" target="_blank" rel="noopener">Preview</a> · <a href="{{ r.studio_path }}" target="_blank" rel="noopener">Studio</a>
+              {%- if r.paid %} · <a href="{{ r.full_path }}" target="_blank" rel="noopener">Full set</a>{% endif %}</p>
+          </td>
           <td>{% if r.status == "new" and not r.paid %}<span class="pill tone-gray">Not contacted</span>{% else %}<span class="pill tone-blue">Contacted</span>{% endif %}</td>
           <td>{% if r.paid %}<span class="pill tone-green">Paid</span>{% else %}<span class="pill tone-gray">Unpaid</span>{% endif %}</td>
           <td>

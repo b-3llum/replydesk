@@ -1,0 +1,31 @@
+{# Owner top bar: the ReplyDesk logo (home) on the left, the Replies / Studio tabs on the right.
+   nav comes from app.owner_nav(): home, replies, studio, paid, pay_url and active ("replies" or "studio").
+   Use: {% import "_nav.html" as top %} then {{ top.bar(nav) }} (owner.html), {{ top.tabs(nav) }} inside
+   another header (studio.html), or {{ top.bar() }} for the logo alone (thanks and error pages). #}
+{% import "_icons.html" as ic %}
+
+{% macro logo(href="/") -%}
+<a class="logo-sm nav-logo" href="{{ href }}"><span class="logo-dot"></span>ReplyDesk</a>
+{%- endmacro %}
+
+{% macro tabs(nav) -%}
+{# The Studio tab opens the studio once paid, and is the active tab on /studio itself. Before paying it
+   unlocks: data-unlock lets the preview remember the business, like its other Unlock buttons. -#}
+<nav class="tabs nav-tabs" aria-label="Your pages">
+  <a class="tab{{ ' is-active' if nav.active == 'replies' }}" href="{{ nav.replies }}"{% if nav.active == 'replies' %} aria-current="page"{% endif %}>Replies</a>
+  {% if nav.paid or nav.active == "studio" -%}
+  <a class="tab{{ ' is-active' if nav.active == 'studio' }}" href="{{ nav.studio }}"{% if nav.active == 'studio' %} aria-current="page"{% endif %}>Studio</a>
+  {%- else -%}
+  <a class="tab" href="{{ nav.pay_url }}" data-unlock title="Unlock to edit every reply in the Studio">{{ ic.icon("lock", 14) }}Studio</a>
+  {%- endif %}
+</nav>
+{%- endmacro %}
+
+{% macro bar(nav=none) -%}
+<header class="nav-bar">
+  {{ logo(nav.home if nav else "/") }}
+  {%- if nav %}
+  {{ tabs(nav) }}
+  {%- endif %}
+</header>
+{%- endmacro %}

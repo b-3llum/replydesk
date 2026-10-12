@@ -407,7 +407,7 @@ a.logo { color: var(--text); text-decoration: none; }
   .sticky-bar { display: none; }
   body.has-bar { padding-bottom: 0; }
 }
-@media (max-width: 1180px) {
+@media (max-width: 1320px) {  /* below this the side cards go under the tables, so the tables keep their action columns in view */
   .admin-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 860px) {
@@ -691,3 +691,27 @@ body.studio .s-copy-note { margin-top: 8px; color: var(--s-muted); font-size: 12
   body.studio .s-copybar { padding-top: 12px; }
   body.studio .s-copy-note { margin-top: 6px; }
 }
+
+/* Navigation */
+/* Outreach: the message holds a long preview URL; let it wrap so the action links stay in view. */
+.table td.message { min-width: 200px; overflow-wrap: anywhere; }
+/* Owner top bar (templates/_nav.html): the logo links home, the Replies / Studio tabs sit on the right.
+   One line down to a 320px phone; on anything narrower the tabs drop below the logo instead of overflowing. */
+.nav-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 18px; }
+.nav-logo { margin: 0; text-decoration: none; }
+.nav-tabs { flex: none; flex-wrap: nowrap; }
+.nav-tabs .tab { text-decoration: none; white-space: nowrap; }
+.nav-tabs .tab:hover:not(.is-active) { color: var(--text); }
+/* Landing header: Admin beside Find my business when signed in; the two stack on the narrowest phones */
+.landing-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+/* Reply Studio: the brand links home, the tabs take the studio's grays. In the desktop header they are
+   32px tall and the bar trades 4px of padding top and bottom, so it keeps its height. */
+body.studio .s-brand-link { display: inline-flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
+body.studio .nav-tabs { background: var(--s-gray-soft); }
+body.studio .nav-tabs .tab { color: var(--s-gray-text); }
+body.studio .nav-tabs .tab.is-active, body.studio .nav-tabs .tab:hover { color: var(--s-text); }
+body.studio .nav-tabs .tab:focus-visible, body.studio .s-brand-link:focus-visible { outline: 2px solid var(--s-blue); outline-offset: 2px; }
+body.studio .s-top { padding-top: 8px; padding-bottom: 8px; }
+body.studio .s-top .nav-tabs { padding: 3px; }
+body.studio .s-top .nav-tabs .tab { padding: 4px 12px; line-height: 18px; }
+body.studio .s-narrow-card .nav-tabs { margin-top: 16px; }

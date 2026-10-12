@@ -1,13 +1,14 @@
-{# Shared layout for the owner's pages (preview and full set). #}
+{# Shared layout for the owner's pages (preview and full set): the top bar (_nav.html), then the page. #}
 {% extends "base.html" %}
 {% block page_class %}owner-wide{% endblock %}
 
 {% block content %}
 {% import "_icons.html" as ic %}
+{% import "_nav.html" as top %}
 {% set rating_text = "%.1f" | format(biz.rating) if biz.rating else "-" %}
+{{ top.bar(nav) }}
 <div class="owner-grid">
   <div class="owner-main">
-    <p class="logo-sm"><span class="logo-dot"></span>ReplyDesk</p>
     {% block banner %}{% endblock %}
     <header class="owner-head">
       <h1 class="title">{{ biz.name }}</h1>

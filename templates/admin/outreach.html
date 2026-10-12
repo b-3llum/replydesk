@@ -63,7 +63,7 @@
               <td><p class="strong">{{ r.name }}</p><p class="muted small">{{ r.phone or "no phone" }}</p></td>
               <td class="num strong{{ ' num-red' if r.unanswered > 30 }}">{{ r.unanswered }}</td>
               <td>{% if r.paid %}<span class="pill tone-green">Paid</span>{% elif r.status == "texted" %}<span class="pill tone-blue">Contacted</span>{% else %}<span class="pill tone-gray">Not contacted</span>{% endif %}</td>
-              <td class="muted small">{{ r.text }}</td>
+              <td class="muted small message">{{ r.text }}</td>
               <td>
                 <div class="actions">
                   <button type="button" class="btn btn-secondary btn-icon" data-copy-value="{{ r.text }}"
@@ -74,6 +74,11 @@
                     <button class="btn btn-secondary btn-sm">Texted</button>
                   </form>
                   {% endif %}
+                </div>
+                {# Owner pages on this server, on their own line so the table gets no wider. #}
+                <div class="actions">
+                  <a class="small" href="{{ r.preview_path }}" target="_blank" rel="noopener">Preview</a>
+                  <a class="small" href="{{ r.studio_path }}" target="_blank" rel="noopener">Studio</a>
                 </div>
               </td>
             </tr>

@@ -5,7 +5,10 @@
 {% block content %}
 <header class="landing-header">
   <span class="wordmark"><span class="logo-dot"></span>ReplyDesk</span>
-  <a class="btn btn-primary btn-sm" href="#find">Find my business</a>
+  <div class="landing-actions">
+    {% if admin_signed_in %}<a class="btn btn-secondary btn-sm" href="/admin">Admin</a>{% endif %}
+    <a class="btn btn-primary btn-sm" href="#find">Find my business</a>
+  </div>
 </header>
 
 <section class="hero">

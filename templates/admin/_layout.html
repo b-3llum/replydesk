@@ -19,6 +19,10 @@
     <nav class="nav" aria-label="Today">
       <a class="nav-item{{ ' is-active' if active == 'outreach' }}" href="/admin/outreach{{ q }}"{% if active == 'outreach' %} aria-current="page"{% endif %}>{{ ic.icon("send", 16) }}Outreach</a>
     </nav>
+    <p class="nav-section">Site</p>
+    <nav class="nav" aria-label="Site">
+      <a class="nav-item" href="/">{{ ic.icon("home", 16) }}Home page</a>
+    </nav>
   </aside>
 
   <div class="admin-main">

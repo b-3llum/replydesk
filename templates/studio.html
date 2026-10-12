@@ -5,7 +5,8 @@
 {% block content %}
 {# Reply Studio, desktop only: the reviews that need a reply on the left, the selected review in the
    middle, the reply composer and its quality check on the right. Each review loads with a small fetch
-   (see the script at the bottom). Styles: the "Reply Studio (desktop)" section of style.css. #}
+   (see the script at the bottom). Styles: the "Reply Studio (desktop)" section of style.css, plus
+   "Navigation" for the brand link and the Replies / Studio tabs (_nav.html). #}
 {% macro stars(n) -%}
 <span class="s-stars" role="img" aria-label="{{ n }} out of 5 stars">
 {%- for i in range(5) %}<span class="{{ 'is-on' if i < n else 'is-off' }}">★</span>{% endfor -%}
@@ -17,14 +18,16 @@
 {% set filters = [("all", "All", counts.all), ("negative", "Negative", counts.negative),
                   ("positive", "Positive", counts.positive), ("neutral", "Unanswered", counts.neutral)] %}
 {% set biz_meta = [biz.category, biz.address] | select | join(" · ") %}
+{% import "_nav.html" as top %}
 <div class="s-app">
   <header class="s-top">
-    <p class="s-brand"><span class="s-brand-dot" aria-hidden="true"></span>ReplyDesk<span class="s-brand-page">Reply Studio</span></p>
+    <p class="s-brand"><a class="s-brand-link" href="{{ nav.home }}"><span class="s-brand-dot" aria-hidden="true"></span>ReplyDesk</a><span class="s-brand-page">Reply Studio</span></p>
     <span class="s-top-divider" aria-hidden="true"></span>
     <div class="s-top-biz">
       <h1 class="s-biz-name">{{ biz.name }}</h1>
       {% if biz_meta %}<p class="s-biz-meta">{{ biz_meta }}</p>{% endif %}
     </div>
+    {{ top.tabs(nav) }}
   </header>
 
   <div class="s-cols">
@@ -139,8 +142,9 @@
 
 <div class="s-narrow">
   <div class="s-card s-narrow-card">
-    <p class="s-brand"><span class="s-brand-dot" aria-hidden="true"></span>ReplyDesk</p>
+    <p class="s-brand"><a class="s-brand-link" href="{{ nav.home }}"><span class="s-brand-dot" aria-hidden="true"></span>ReplyDesk</a></p>
     <p class="s-narrow-text">Reply Studio is built for desktop screens. Open this link on a laptop.</p>
+    {{ top.tabs(nav) }}
   </div>
 </div>
 {% endblock %}

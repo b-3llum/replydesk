@@ -2,10 +2,13 @@
 {% block title %}{{ heading }} · ReplyDesk{% endblock %}
 
 {% block content %}
+{% import "_nav.html" as top %}
+{{ top.bar() }}
 <div class="center">
   <div class="card thanks">
     <h1 class="title">{{ heading }}</h1>
     <p class="muted">{{ message }}</p>
+    <a class="btn btn-secondary btn-block btn-big" href="/">Go to the home page</a>
   </div>
 </div>
 {% endblock %}

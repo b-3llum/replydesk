@@ -151,6 +151,23 @@ def payment_url(slug):
     return link + separator + urllib.parse.urlencode({"client_reference_id": slug})
 
 
+def owner_paths(biz):
+    """Root-relative links to the business's three owner pages; all three take the preview token."""
+    slug = urllib.parse.quote(biz["_id"])
+    query = urllib.parse.urlencode({"t": biz.get("preview_token") or ""})
+    return {"preview_path": f"/p/{slug}?{query}", "full_path": f"/full/{slug}?{query}",
+            "studio_path": f"/studio/{slug}?{query}"}
+
+
+def owner_nav(biz, active):
+    """The owner top bar (templates/_nav.html). Replies opens the full set once paid, the preview
+    before that; active is "replies" (/p, /full) or "studio"."""
+    paths = owner_paths(biz)
+    paid = bool(biz.get("paid"))
+    return {"home": "/", "replies": paths["full_path"] if paid else paths["preview_path"],
+            "studio": paths["studio_path"], "paid": paid, "pay_url": payment_url(biz["_id"]), "active": active}
+
+
 def ready_reviews(reviews):
     """Unanswered reviews that have a reply written, in the order given (newest first)."""
     return [r for r in reviews if r.get("owner_replied") is False and r.get("reply")]
@@ -214,7 +231,7 @@ def preview(request: Request, slug: str, t: str = ""):
     cards = [card(r, locked=i >= FREE_CARDS) for i, r in enumerate(ordered)]
     return templates.TemplateResponse(request, "preview.html", {
         "biz": biz, "cards": cards, "pay_url": payment_url(slug), "price": config.PRICE_USD,
-        **stats(reviews)})
+        "nav": owner_nav(biz, "replies"), **stats(reviews)})
 
 
 @app.get("/p/{slug}/status.json")
@@ -232,7 +249,7 @@ def full(request: Request, slug: str, t: str = ""):
     reviews = store.reviews_for(slug)
     cards = [card(r) for r in ready_reviews(reviews)]  # no MAX_CARDS cap: they paid for every reply
     return templates.TemplateResponse(request, "full.html", {
-        "biz": biz, "cards": cards, **stats(reviews)})
+        "biz": biz, "cards": cards, "nav": owner_nav(biz, "replies"), **stats(reviews)})
 
 
 @app.get("/thanks")
@@ -253,7 +270,7 @@ def _examples():
     return unpaid, paid
 
 
-def landing_context(**extra):
+def landing_context(request, **extra):
     s = cached_stats()  # both cached: the public page must not hammer Atlas
     unpaid, paid = _cached("examples", _examples)
     tour = None
@@ -270,6 +287,7 @@ def landing_context(**extra):
         "example_url": f"/p/{unpaid['_id']}?t={unpaid['preview_token']}" if unpaid else None,
         "plan": "one-time",
         "tour": tour,
+        "admin_signed_in": admin_signed_in(request),  # the header then links the admin
     }, **extra)
 
 
@@ -288,7 +306,7 @@ def _name_from_maps_link(text):
 def landing(request: Request, plan: str = "", sent: str = ""):
     waitlist = plan == "monthly"  # "Join the waitlist" opens the request form on the monthly plan
     return templates.TemplateResponse(request, "landing.html", landing_context(
-        plan="monthly" if waitlist else "one-time", show_form=waitlist, sent=bool(sent)))
+        request, plan="monthly" if waitlist else "one-time", show_form=waitlist, sent=bool(sent)))
 
 
 @app.post("/find")
@@ -301,8 +319,9 @@ async def find(request: Request):
                 "unanswered": b.get("unanswered_count") or 0, "url": f"/p/{b['_id']}?t={b['preview_token']}"}
                for b in matches]
     context = await run_in_threadpool(
-        landing_context, query=query, searched=bool(query), results=results, show_form=bool(query) and not results,
-        prefill_name="" if is_link else query, prefill_maps=query if is_link else "")
+        landing_context, request, query=query, searched=bool(query), results=results,
+        show_form=bool(query) and not results, prefill_name="" if is_link else query,
+        prefill_maps=query if is_link else "")
     return templates.TemplateResponse(request, "landing.html", context)
 
 
@@ -316,7 +335,7 @@ async def request_preview(request: Request):
     plan = plan if plan in PLANS else "one-time"
     if not name or len(re.sub(r"\D", "", phone)) < 7:
         context = await run_in_threadpool(
-            landing_context, show_form=True, plan=plan, prefill_name=name, prefill_phone=phone,
+            landing_context, request, show_form=True, plan=plan, prefill_name=name, prefill_phone=phone,
             prefill_maps=maps_url, form_error="Add your business name and a phone number we can text.")
         return templates.TemplateResponse(request, "landing.html", context, status_code=400)
     await run_in_threadpool(store.add_request, name, phone, maps_url, plan)
@@ -347,6 +366,15 @@ def require_admin(key, request=None):
     if DEMO_MODE:  # open to everyone; "" sets no remember-me cookie
         return ""
     raise HTTPException(status_code=403, detail="This admin link is not valid")
+
+
+def admin_signed_in(request):
+    """True when this browser would get into the admin without a key (its cookie, or DEMO_MODE)."""
+    try:
+        require_admin("", request)
+    except HTTPException:
+        return False
+    return True
 
 
 def _admin_or_login(request, key):
@@ -410,7 +438,8 @@ def business_row(b):
     return {"slug": b["_id"], "name": b.get("name") or b["_id"], "category": b.get("category") or "",
             "phone": b.get("phone") or "", "unanswered": b.get("unanswered_count") or 0,
             "status": b.get("status") or "new", "paid": bool(b.get("paid")),
-            "preview_url": outreach.preview_url(b), "text": outreach.outreach_text(b)}
+            "preview_url": outreach.preview_url(b), "text": outreach.outreach_text(b),
+            **owner_paths(b)}  # preview_path, full_path, studio_path: the admin's Open links
 
 
 def local_time(iso):
@@ -578,7 +607,8 @@ def studio_page(request: Request, slug: str, t: str = ""):
     biz = business_for(slug, t)
     rows = studio.rows(ready_reviews(store.reviews_for(slug)))
     return templates.TemplateResponse(request, "studio.html", {
-        "biz": biz, "token": t, "rows": rows, "counts": studio.counts(rows)})
+        "biz": biz, "token": t, "rows": rows, "counts": studio.counts(rows),
+        "nav": owner_nav(biz, "studio")})  # the Studio tab is the active one here, paid or not
 
 
 @app.get("/studio/{slug}/review/{rid}.json")
