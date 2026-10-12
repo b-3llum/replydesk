@@ -5,7 +5,7 @@
 {% block content %}
 <header class="landing-header">
   <span class="wordmark"><span class="logo-dot"></span>ReplyDesk</span>
-  <a class="btn btn-dark btn-sm" href="#find">Find my business</a>
+  <a class="btn btn-primary btn-sm" href="#find">Find my business</a>
 </header>
 
 <section class="hero">
@@ -67,7 +67,7 @@
     <a class="btn btn-primary btn-block" href="#find">Find my business</a>
   </div>
   <div class="card price">
-    <p class="stat-label">Ongoing <span class="pill tone-grey">Coming soon</span></p>
+    <p class="stat-label">Ongoing <span class="pill tone-gray">Coming soon</span></p>
     <p class="price-line"><span class="stat-number">$19</span><span class="muted">/month</span></p>
     <p class="muted small">New reviews answered every week, auto-posting when you connect Google.</p>
     <a class="btn btn-secondary btn-block" href="/?plan=monthly#request">Join the waitlist</a>
@@ -82,7 +82,7 @@
   <form method="post" action="/find#find" class="find-form">
     <input class="input" name="q" value="{{ query or '' }}" placeholder="Business name or Google Maps link"
            aria-label="Business name or Google Maps link" required maxlength="200">
-    <button class="btn btn-dark">Find</button>
+    <button class="btn btn-primary">Find</button>
   </form>
 
   {% if results %}
@@ -92,7 +92,7 @@
       <div>
         <p class="strong">{{ r.name }}</p>
         {% if r.address %}<p class="muted small">{{ r.address }}</p>{% endif %}
-        <p class="result-count"><span class="pill tone-red">{{ r.unanswered }} reviews with no reply</span></p>
+        <p class="result-count"><span class="pill tone-red">{{ r.unanswered }} review{{ "" if r.unanswered == 1 else "s" }} with no reply</span></p>
       </div>
       <a class="btn btn-primary" href="{{ r.url }}">See my replies</a>
     </div>
@@ -121,7 +121,7 @@
       <label class="radio"><input type="radio" name="plan" value="monthly"{{ " checked" if plan == "monthly" }}> Ongoing, $19/month (waitlist)</label>
     </fieldset>
     <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-    <button class="btn btn-dark btn-block">Text me my preview</button>
+    <button class="btn btn-primary btn-block">Text me my preview</button>
   </form>
   {% endif %}
 </section>

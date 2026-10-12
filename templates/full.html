@@ -3,7 +3,7 @@
 {% block page_class %}{% endblock %}
 
 {% block banner %}
-<p class="paid-banner">Paid. Thank you.</p>
+<p class="paid-band">Paid. Thank you.</p>
 {% endblock %}
 
 {% block reviews %}
@@ -45,7 +45,7 @@
     </div>
   </article>
 {% else %}
-  <div class="card"><p class="empty">No replies are ready yet. Check back in a few minutes.</p></div>
+  {% if unanswered %}<div class="card"><p class="empty">No replies are ready yet. Check back in a few minutes.</p></div>{% endif %}
 {% endfor %}
   <p class="empty" id="filter-empty" hidden>No reviews with these stars.</p>
 </section>
@@ -60,7 +60,8 @@ if (copyAll) {
     var parts = [];
     document.querySelectorAll(".review").forEach(function (card) {
       var reply = card.querySelector(".reply-text").textContent.trim();
-      parts.push("Reply to " + card.dataset.author + " (" + card.dataset.stars + " stars):\n" + reply);
+      var stars = card.dataset.stars + (card.dataset.stars === "1" ? " star" : " stars");
+      parts.push("Reply to " + card.dataset.author + " (" + stars + "):\n" + reply);
     });
     copyText(parts.join("\n\n"), copyAll);
   });

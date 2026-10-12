@@ -1,7 +1,11 @@
 """ReplyDesk smoke checks: a plain script, no test framework.
 
     python smoke.py            run every section
-    python smoke.py store      run only the named section(s)
+    python smoke.py store web  run only the named section(s)
+
+    store   store.py on temp JSON files and throwaway replydesk_smoke_* databases (dropped after)
+    llm     prompt and template rules offline, then one live Luminal call
+    web     the app on a free local port: read-only requests against the configured store, no LLM calls
 
 Prints one line per check (PASS <name> / FAIL <name>: <detail> / SKIP <name>: <reason>),
 then a SUMMARY line. Exit code 1 if anything failed.
@@ -13,14 +17,19 @@ module can't stop the other sections from running.
 import json
 import os
 import random
+import re
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
 import config
@@ -234,14 +243,61 @@ def check_api(s, label):
           and all(b.get("name") != "mutated" for b in s.list_businesses())
           and s.list_orders()[0]["amount"] == 29, fresh)
 
-    try:
-        s.save_reply("no-such-review", "x", "m", 1, 1)
-        raised = "nothing"
-    except KeyError:
-        raised = "KeyError"
-    except Exception as e:
-        raised = type(e).__name__
+    raised = _raised(s.save_reply, "no-such-review", "x", "m", 1, 1)
     check(f"{label}: save_reply on an unknown review raises KeyError", raised == "KeyError", raised)
+
+    tags = [{"label": "Pizza", "kind": "topic"}]
+    s.save_tags("joes-r1", tags)
+    s.upsert_reviews([dict(reviews[0], text="Best slice in Abington (edited)")])  # a re-scrape
+    r1 = _by_id(s.reviews_for("joes-pizza")).get("joes-r1", {})
+    raised = _raised(s.save_tags, "no-such-review", tags)
+    check(f"{label}: save_tags shows in reviews_for and survives a re-scrape; unknown review raises KeyError",
+          r1.get("tags") == tags and r1.get("reply") == "Thank you so much! \U0001F355" and raised == "KeyError",
+          f"r1={r1} unknown={raised}")
+
+    if s is store:  # the module builds the lead doc; the backends store the doc they are given
+        s.add_request("Corner Deli", "(215) 555-0199")
+        s.add_request("Main St Bakery", "(215) 555-0198", "https://maps.google.com/?cid=2", "monthly")
+    else:
+        for name, created in (("Corner Deli", "2026-10-01T10:00:00+00:00"),
+                              ("Main St Bakery", "2026-10-01T10:05:00+00:00")):
+            s.add_request({"name": name, "phone": "(215) 555-0199", "maps_url": "", "plan": "one-time",
+                           "created_at": created, "status": "new"})
+    leads = s.list_requests()
+    check(f"{label}: list_requests newest first, with a limit",
+          [r.get("name") for r in leads] == ["Main St Bakery", "Corner Deli"]
+          and all(isinstance(r.get("_id"), str) for r in leads)
+          and [r.get("name") for r in s.list_requests(1)] == ["Main St Bakery"], leads)
+    if s is store:
+        lead = leads[0] if leads else {}
+        check(f"{label}: add_request saves plan, maps_url, status new and created_at",
+              lead.get("plan") == "monthly" and lead.get("maps_url") == "https://maps.google.com/?cid=2"
+              and lead.get("status") == "new" and _utc_iso(lead.get("created_at"), recent=True), lead)
+
+    s.save_reply("bella-r1", "Thanks for the rating.", "template", 0, 0)
+    since = s.replies_since("2000-01-01T00:00:00+00:00")
+    later = s.replies_since("2999-01-01T00:00:00+00:00")
+    latest = [r["_id"] for r in s.latest_replies(25)]
+    check(f"{label}: replies_since and latest_replies count LLM replies only, not templates",
+          since == {"replies": 1, "tokens_in": 120, "tokens_out": 45}
+          and later == {"replies": 0, "tokens_in": 0, "tokens_out": 0} and latest == ["joes-r1"],
+          f"since={since} later={later} latest={latest}")
+
+    if s is store:  # module only: it searches list_businesses()
+        found = [b["_id"] for b in s.find_businesses("  JOE'S   pizza ")]
+        top = [b["_id"] for b in s.find_businesses("a", limit=2)]
+        check(f"{label}: find_businesses ignores case and spaces, most unanswered first, with a limit",
+              found == ["joes-pizza"] and top == ["abc-auto", "bella-salon"] and s.find_businesses(" ") == [],
+              f"found={found} top={top}")
+
+
+def _raised(fn, *args):
+    """The name of the exception fn(*args) raises, or "nothing"."""
+    try:
+        fn(*args)
+    except Exception as e:
+        return type(e).__name__
+    return "nothing"
 
 
 def check_import_is_lazy():
@@ -469,27 +525,39 @@ def check_mongo(tmp):
             _review("mig-r3", "mig-deli", "2026-09-01T12:00:00+00:00", "Fine"),
         ])
         src.save_reply("mig-r1", "Thanks for stopping by ☕", "llama-3.1-8b", 50, 20)
+        src.save_tags("mig-r1", [{"label": "Latte", "kind": "topic"}])
+        src.add_request({"name": "Migration Lead", "phone": "(215) 555-0150", "maps_url": "", "plan": "one-time",
+                         "created_at": "2026-10-01T09:00:00+00:00", "status": "new"})
         src.mark_paid("mig-cafe")
         token = src.get_business("mig-cafe")["preview_token"]
 
+        known = ("businesses", "reviews", "orders_inserted", "orders_skipped")  # a newer store may count more
         counts = store.migrate_json_to_mongo(src_path, uri, db_migrate)
         check("mongo: migrate_json_to_mongo counts",
-              counts == {"businesses": 2, "reviews": 3, "orders_inserted": 1, "orders_skipped": 0}, counts)
+              {k: counts.get(k) for k in known}
+              == {"businesses": 2, "reviews": 3, "orders_inserted": 1, "orders_skipped": 0}, counts)
         counts = store.migrate_json_to_mongo(src_path, uri, db_migrate)
         check("mongo: migrate again is idempotent (no duplicate order)",
-              counts == {"businesses": 2, "reviews": 3, "orders_inserted": 0, "orders_skipped": 1}, counts)
+              {k: counts.get(k) for k in known}
+              == {"businesses": 2, "reviews": 3, "orders_inserted": 0, "orders_skipped": 1}, counts)
         dst = store.MongoStore(uri, db_migrate)
         try:
             r1 = _by_id(dst.reviews_for("mig-cafe")).get("mig-r1", {})
             biz = dst.get_business("mig-cafe") or {}
             got = dst.stats()
-            check("mongo: migrated reply, preview_token and payment survive",
+            check("mongo: migrated reply, tags, preview_token and payment survive",
                   r1.get("reply") == "Thanks for stopping by ☕" and r1.get("model") == "llama-3.1-8b"
-                  and r1.get("tokens_in") == 50 and biz.get("preview_token") == token
+                  and r1.get("tokens_in") == 50 and r1.get("tags") == [{"label": "Latte", "kind": "topic"}]
+                  and biz.get("preview_token") == token
                   and biz.get("paid") is True and biz.get("replies_ready") == 1
                   and got["businesses"] == 2 and got["reviews"] == 3 and got["paid_orders"] == 1
                   and len(dst.list_orders()) == 1,
                   f"r1={r1} biz={biz} stats={got}")
+            leads = dst.list_requests()
+            if leads:
+                check("mongo: migrated requests, once", [r.get("name") for r in leads] == ["Migration Lead"], leads)
+            else:
+                skip("mongo: migrate requests", "this store.py's migrate_json_to_mongo copied no requests")
         finally:
             dst.close()
     finally:
@@ -561,11 +629,220 @@ def section_llm():
     check("llm: token usage counted", out["tokens_in"] > 0 and out["tokens_out"] > 0, out)
 
 
+# ---------------------------------------------------------------- section: web
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None  # the 3xx comes back as is, so its status and Location can be checked
+
+
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)  # no system proxy
+
+
+def _http(base, path, data=None, headers=None):
+    """(status, headers, body) of one request; status None when nothing answered."""
+    request = urllib.request.Request(base + path, data=data, headers=headers or {})
+    try:
+        with _OPENER.open(request, timeout=60) as resp:
+            return resp.status, resp.headers, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers, e.read().decode("utf-8", "replace")
+    except OSError:  # refused (not up yet), reset or timed out
+        return None, {}, ""
+
+
+def _json_dict(body):
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _page(base, name, path, status, marker="", **kw):
+    """Check one response's status and that marker is in its body."""
+    code, _, body = _http(base, path, **kw)
+    return check(f"web: {name}", code == status and marker in body,
+                 f"status {code}" + ("" if marker in body else f", {marker!r} not in the page"))
+
+
+def _api(base, name, path, status, test, **kw):
+    """Check one JSON response's status and test(data)."""
+    code, _, body = _http(base, path, **kw)
+    data = _json_dict(body)
+    error = f", error {data['error']!r}" if data and data.get("error") else ""
+    return check(f"web: {name}", code == status and data is not None and bool(test(data)), f"status {code}{error}")
+
+
+def _redirect(base, name, path, target):
+    """Check a 303 to target. Location itself is never printed: it carries the preview token."""
+    code, headers, _ = _http(base, path)
+    ok = (headers.get("location") or "").startswith(target)
+    return check(f"web: {name}", code == 303 and ok, f"status {code}, Location starts with {target}: {ok}")
+
+
+def _score(data):
+    """The quality score in a studio answer, when it is an int from 0 to 100."""
+    score = (data.get("quality") or {}).get("score")
+    return score if isinstance(score, int) and 0 <= score <= 100 else None
+
+
+def _size(path):
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
+def _drain(stream, lines):
+    for line in stream:
+        lines.append(line.rstrip())
+
+
+def _start_server():
+    """uvicorn app:app on a free 127.0.0.1 port -> (process, base URL, output lines).
+    No access log: its request lines would carry ?key= and preview tokens."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", str(port),
+         "--no-access-log", "--log-level", "warning"],
+        cwd=str(config.BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        encoding="utf-8", errors="replace",
+        env=dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1"))
+    output = []
+    threading.Thread(target=_drain, args=(proc.stdout, output), daemon=True).start()
+    return proc, f"http://127.0.0.1:{port}", output
+
+
+def _stop_server(proc):
+    proc.terminate()  # on Windows the exit code is then 1, so it is not checked
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
+def check_pages(base, demo, admin_key, unpaid, paid):
+    code, _, body = _http(base, "/")
+    check(f"web: GET / 200 'Find my business', 'Take the tour' {'shown (demo mode)' if demo else 'hidden'}",
+          code == 200 and "Find my business" in body and ("Take the tour" in body) == demo,
+          f"status {code}, tour shown: {'Take the tour' in body}")
+    _page(base, "GET /static/style.css 200", "/static/style.css", 200)
+    _page(base, "GET /thanks 200 'Payment received.'", "/thanks", 200, "Payment received.")
+    _page(base, "GET /p unknown slug 404 'Page not found'", "/p/no-such-business?t=x", 404, "Page not found")
+    _page(base, "GET /no-such-page 404 'Page not found'", "/no-such-page", 404, "Page not found")
+
+    if unpaid is None:
+        skip("web: preview and studio", "no unpaid business with more than 5 replies ready")
+    else:
+        slug = urllib.parse.quote(unpaid["_id"])
+        t = "?" + urllib.parse.urlencode({"t": unpaid["preview_token"]})
+        rid = next((r["_id"] for r in store.reviews_for(unpaid["_id"])
+                    if r.get("owner_replied") is False and r.get("reply")), "")
+        review = f"/studio/{slug}/review/{urllib.parse.quote(rid, safe='')}"
+        _page(base, f"GET /p/{slug} 200 'Unlock every reply'", f"/p/{slug}{t}", 200, "Unlock every reply")
+        _api(base, f"GET /p/{slug}/status.json 200 paid false", f"/p/{slug}/status.json{t}", 200,
+             lambda d: d == {"paid": False})
+        _redirect(base, f"GET /full/{slug} unpaid 303 to /p", f"/full/{slug}{t}", f"/p/{slug}?t=")
+        _page(base, f"GET /p/{slug} wrong token 403", f"/p/{slug}?t=wrong-token", 403,
+              "Open the link from the text we sent you")
+        _page(base, f"GET /studio/{slug} 200 'AI Reply Composer'", f"/studio/{slug}{t}", 200, "AI Reply Composer")
+        _page(base, f"GET /studio/{slug} wrong token 403", f"/studio/{slug}?t=wrong-token", 403)
+        _api(base, "GET studio review.json 200 with a quality score", f"{review}.json{t}", 200,
+             lambda d: d.get("id") == rid and _score(d) is not None)
+        _api(base, "POST studio quality.json 200 with a score 0-100", f"{review}/quality.json{t}", 200,
+             lambda d: _score(d) is not None, data=json.dumps({"text": "Thanks for coming in, Sam."}).encode(),
+             headers={"Content-Type": "application/json"})
+        _api(base, "GET studio review.json wrong token 403", f"{review}.json?t=wrong-token", 403,
+             lambda d: bool(d.get("error")))
+        _api(base, "GET studio review.json unknown review 404", f"/studio/{slug}/review/no-such-review.json{t}",
+             404, lambda d: d == {"error": "Review not found"})
+        _page(base, "POST /find a known name 200 'See my replies'", "/find", 200, "See my replies",
+              data=urllib.parse.urlencode({"q": unpaid.get("name") or unpaid["_id"]}).encode(),
+              headers={"Content-Type": "application/x-www-form-urlencoded"})
+
+    if paid is None:
+        skip("web: paid full set", "no paid business yet")
+    else:
+        slug = urllib.parse.quote(paid["_id"])
+        t = "?" + urllib.parse.urlencode({"t": paid["preview_token"]})
+        _redirect(base, f"GET /p/{slug} paid 303 to /full", f"/p/{slug}{t}", f"/full/{slug}?t=")
+        _page(base, f"GET /full/{slug} 200 'Paid. Thank you.'", f"/full/{slug}{t}", 200, "Paid. Thank you.")
+
+    if not admin_key and not demo:
+        skip("web: admin pages", "ADMIN_KEY is not set")
+    else:
+        k = "?" + urllib.parse.urlencode({"key": admin_key}) if admin_key else ""
+        public_url = bool(config.get("PUBLIC_BASE_URL"))
+        for path, label, marker, needs_url in (
+                ("/admin", "'Businesses'", '<h1 class="title">Businesses</h1>', True),
+                ("/admin/reviews", "'Reviews'", '<h1 class="title">Reviews</h1>', False),
+                ("/admin/orders", "'Orders'", '<h1 class="title">Orders</h1>', False),
+                ("/admin/outreach", "'Outreach'", '<h1 class="title">Outreach</h1>', True),
+                ("/admin/export.csv", "CSV header", "name,phone,category,unanswered,preview_url,status", True)):
+            if needs_url and not public_url:
+                skip(f"web: GET {path}", "PUBLIC_BASE_URL is not set, and this page needs it")
+            else:
+                _page(base, f"GET {path} 200 {label}", path + k, 200, marker)
+        _api(base, "GET /admin/stats.json 200", "/admin/stats.json" + k, 200,
+             lambda d: isinstance(d.get("businesses"), int))
+    if demo:
+        skip("web: admin sign-in and wrong key", "DEMO_MODE is on, so the admin is open")
+    else:
+        _page(base, "GET /admin without a key 200 sign-in page", "/admin", 200, "Enter the admin key")
+        _page(base, "GET /admin wrong key 403", "/admin?key=wrong-key", 403, "That key didn")
+        _api(base, "GET /admin/stats.json wrong key 403", "/admin/stats.json?key=wrong-key", 403,
+             lambda d: bool(d.get("error")))
+
+
+def section_web():
+    """app.py over HTTP. Read-only: GETs, POST /find and the studio's quality.json. Never requests
+    tags.json or compose.json (LLM calls) or /request, mark-paid and mark-texted (writes). Check
+    names and details carry slugs, never preview tokens or the admin key."""
+    demo = (config.get("DEMO_MODE") or "").lower() in ("1", "true", "yes")  # the rule in app.py
+    admin_key = config.get("ADMIN_KEY") or ""
+    businesses = store.list_businesses()  # most unanswered first
+    unpaid = next((b for b in businesses if not b.get("paid") and (b.get("replies_ready") or 0) > 5), None)
+    paid = next((b for b in businesses if b.get("paid")), None)
+    llm_log = config.DATA_DIR / "llm.log"
+    log_size = _size(llm_log)
+
+    proc, base, output = _start_server()
+    try:
+        started = time.monotonic()
+        status, body = None, ""
+        while status is None and proc.poll() is None and time.monotonic() - started < 90:
+            status, _, body = _http(base, "/health")
+            if status is None:
+                time.sleep(0.3)
+        health = _json_dict(body) or {}
+        if not check(f"web: GET /health 200, ok, store {store.BACKEND} (up in {time.monotonic() - started:.1f}s)",
+                     status == 200 and health.get("ok") is True and health.get("store") == store.BACKEND,
+                     f"status {status} {body[:200]}; server output: {' | '.join(output[-15:])}"):
+            return
+        check_pages(base, demo, admin_key, unpaid, paid)
+        check("web: the server is still running after the checks", proc.poll() is None,
+              f"exit code {proc.returncode}; server output: {' | '.join(output[-15:])}")
+    finally:
+        _stop_server(proc)
+
+    grew, tags = _size(llm_log) - log_size, ""
+    if grew > 0:  # e.g. the admin's prompt-evolution card writing its sample replies
+        with open(llm_log, "rb") as f:
+            f.seek(log_size)
+            tags = ", ".join(sorted(set(re.findall(r"tag=(\S+)", f.read().decode("utf-8", "replace")))))
+    check("web: no LLM calls (data/llm.log did not grow)", grew == 0, f"grew {grew} bytes, tags: {tags}")
+
+
 # ---------------------------------------------------------------- main
 
 SECTIONS = {
     "store": section_store,
     "llm": section_llm,
+    "web": section_web,
 }
 
 

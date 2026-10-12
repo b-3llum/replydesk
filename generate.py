@@ -121,7 +121,7 @@ def reply_for(review, business, variant=None):
         return {"text": fill_phone(template_reply(review, variant), phone), "model": "template",
                 "tokens_in": 0, "tokens_out": 0, "reasoning_tokens": 0, "problems": []}
     messages = prompts.build_messages(business, review)
-    tag = review["_id"][:16]
+    tag = review["_id"][-12:]  # Google review ids share long prefixes; the end is unique
     best = llm.complete(messages, tag=tag)
     totals = {k: best[k] for k in ("tokens_in", "tokens_out", "reasoning_tokens")}
     broken = problems(best["text"], review, phone)
@@ -214,7 +214,7 @@ def _rewrite(biz, review, text, asks, low_ids):
         {"role": "user", "content": "Rewrite it with the same facts and tone. " + " ".join(fixes)
                                     + " Output only the reply text."}]
     try:
-        out = llm.complete(messages, tag=rid[:16] + ":vary")
+        out = llm.complete(messages, tag=rid[-12:] + ":vary")
     except llm.LLMError as e:
         llm.log.error("review=%s vary rewrite failed: %s", rid, e)
         return False
@@ -222,9 +222,12 @@ def _rewrite(biz, review, text, asks, low_ids):
     won = issues(new) < issues(text[rid])
     if won:
         text[rid] = new
+        review["generated_at"] = None  # new text: save_reply stamps it now
     review["tokens_in"] = (review.get("tokens_in") or 0) + out["tokens_in"]
     review["tokens_out"] = (review.get("tokens_out") or 0) + out["tokens_out"]
-    store.save_reply(rid, text[rid], review.get("model") or out["model"], review["tokens_in"], review["tokens_out"])
+    # A rewrite that lost keeps the reply's date, so it doesn't count as written today in the admin.
+    store.save_reply(rid, text[rid], review.get("model") or out["model"], review["tokens_in"], review["tokens_out"],
+                     generated_at=review.get("generated_at"))
     return won
 
 
@@ -286,7 +289,8 @@ def _trim_twin_closings(biz, written, text):
         if problems(shorter, r, phone) or closing_key(shorter) in _taken(text, rid, closing_key):
             continue
         text[rid] = shorter
-        store.save_reply(rid, shorter, r.get("model"), r.get("tokens_in") or 0, r.get("tokens_out") or 0)
+        store.save_reply(rid, shorter, r.get("model"), r.get("tokens_in") or 0, r.get("tokens_out") or 0,
+                         generated_at=r.get("generated_at"))  # no LLM call: the reply keeps its date
         trimmed += 1
     return trimmed
 
@@ -341,6 +345,10 @@ def generate(slug=None, redo=False, workers=WORKERS):
         _diversity_pass([slug] if slug else [b["_id"] for b in store.list_businesses()], time.time())
         return {}
     businesses = {b["_id"]: b for b in store.list_businesses()}
+    orphans = sum(1 for r in targets if r.get("business_id") not in businesses)
+    if orphans:  # e.g. an interrupted scrape: it saves reviews before their business
+        print(f"Skipping {orphans} review(s) whose business is not in the store.", flush=True)
+        targets = [r for r in targets if r.get("business_id") in businesses]
     variants, used = {}, Counter()
     for r in targets:  # rotate template wordings within each business
         if not r.get("text"):
@@ -379,6 +387,8 @@ def generate(slug=None, redo=False, workers=WORKERS):
 
 
 def _diversity_pass(slugs, started):
+    if not slugs:  # nothing to vary, e.g. an empty store
+        return
     print(f"Diversity pass over {len(slugs)} business(es) ...", flush=True)
     with ThreadPoolExecutor(max_workers=min(10, len(slugs))) as pool:
         fixed = sum(pool.map(_diversify_safe, slugs), Counter())

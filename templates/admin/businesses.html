@@ -56,7 +56,7 @@
     <table class="table">
       <thead>
         <tr><th>Business</th><th>Category</th><th class="num">Unanswered</th><th>Preview</th>
-            <th>Status</th><th>Paid</th><th></th></tr>
+            <th>Status</th><th>Paid</th><th aria-label="Actions"></th></tr>
       </thead>
       <tbody>
       {% for r in rows %}
@@ -88,7 +88,7 @@
   </div>
   <p class="empty" id="tab-empty" hidden>No businesses here yet.</p>
   {% else %}
-  <p class="empty">No businesses yet. Run python run.py scrape to find some.</p>
+  <p class="empty">No businesses yet. Run python run.py scrape --query "restaurants Philadelphia" to find some.</p>
   {% endif %}
   <p class="insight">Businesses with 30+ unanswered reviews close fastest. Call those first.</p>
 </section>

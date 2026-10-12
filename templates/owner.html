@@ -4,9 +4,6 @@
 
 {% block content %}
 {% import "_icons.html" as ic %}
-{# These come from app.py; the fallbacks keep the page whole on a server still running older code. #}
-{% set total_n = total if total is defined else (biz.review_count or unanswered) %}
-{% set pct = unanswered_pct if unanswered_pct is defined else ((100 * unanswered / total_n) | round | int if total_n else 0) %}
 {% set rating_text = "%.1f" | format(biz.rating) if biz.rating else "-" %}
 <div class="owner-grid">
   <div class="owner-main">
@@ -21,14 +18,14 @@
       <div class="metric">
         <span class="chip chip-lg">{{ ic.icon("message") }}</span>
         <span class="metric-label">Total reviews</span>
-        <span class="metric-number">{{ total_n }}</span>
+        <span class="metric-number">{{ total }}</span>
         <span class="pill tone-gray">most recent</span>
       </div>
       <div class="metric">
         <span class="chip chip-lg">{{ ic.icon("alert") }}</span>
         <span class="metric-label">Unanswered</span>
         <span class="metric-number">{{ unanswered }}</span>
-        <span class="pill tone-red">{{ pct }}% no reply</span>
+        <span class="pill tone-red">{{ unanswered_pct }}% no reply</span>
       </div>
       <div class="metric">
         <span class="chip chip-lg">{{ ic.icon("star") }}</span>
@@ -43,10 +40,12 @@
         <span class="pill tone-green">ready</span>
       </div>
     </section>
+    {% if unanswered %}
     <p class="insight">
       {% if low_unanswered %}{{ low_unanswered }} of your one- and two-star reviews never got an owner reply. Yours are below, drafted in your voice.
       {% else %}Your unanswered reviews are below, drafted in your voice.{% endif %}
     </p>
+    {% endif %}
 
     {% if unanswered %}
     <div class="info"><span class="info-icon" aria-hidden="true">i</span>

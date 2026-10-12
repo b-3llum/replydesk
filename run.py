@@ -2,10 +2,11 @@
 
     python run.py scrape --query "restaurants Baltimore Avenue Philadelphia" --max 10 [--from-cache]
     python run.py list
-    python run.py generate --business <slug> [--redo]   or   --all
-    python run.py samples --business <slug>
-    python run.py serve                                  (0.0.0.0:8000)
-    python run.py migrate
+    python run.py generate --business <slug> [--redo] [--samples N]   or   --all [--redo]
+    python run.py samples --business <slug> [--n N]
+    python run.py serve [--reload]                       (0.0.0.0:8000)
+    python run.py migrate                                (JSON store -> MongoDB)
+    python run.py outreach                               (data/outreach.csv)
 
 Project modules are imported inside each command so one missing module never breaks the others.
 """
@@ -92,7 +93,8 @@ def build_parser():
     p.add_argument("--business", required=True, help="slug from run.py list")
     p.add_argument("--n", type=int, default=5, help="how many (default 5)")
     p.set_defaults(func=cmd_samples)
-    p = sub.add_parser("serve", help="web app on 0.0.0.0:8000 (preview, full set, thanks, admin)")
+    p = sub.add_parser("serve", help="web app on 0.0.0.0:8000 (landing page, owner preview and full set, "
+                                     "Reply Studio, admin)")
     p.add_argument("--reload", action="store_true", help="restart automatically when code changes")
     p.set_defaults(func=cmd_serve)
     sub.add_parser("outreach", help="write data/outreach.csv, most unanswered first").set_defaults(func=cmd_outreach)

@@ -100,8 +100,8 @@ def clean(text):
 def complete(messages, tag=""):
     """One chat completion -> {text, tokens_in, tokens_out, reasoning_tokens, model}.
 
-    Retries network errors, 429, 5xx and empty replies RETRIES times; token counts add up
-    across attempts. Raises LLMError when every attempt fails.
+    Retries network errors, 429, 5xx, non-JSON answers and empty replies RETRIES times; token
+    counts add up across attempts. Raises LLMError when every attempt fails.
     """
     base = config.require("LUMINAL_BASE_URL").rstrip("/")
     key = config.require("LUMINAL_API_KEY")
@@ -139,7 +139,14 @@ def complete(messages, tag=""):
             continue
         if not resp.ok:
             raise LLMError(f"Luminal HTTP {resp.status_code}: {resp.text[:300].replace(key, '***')}")
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:  # e.g. a proxy's HTML page with a 200
+            data = None
+        if not isinstance(data, dict):
+            error = f"HTTP {resp.status_code}: not a JSON object"
+            log.warning("call tag=%s attempt=%d error=%s", tag, attempt, error)
+            continue
         usage = data.get("usage") or {}
         reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
         used["in"] += usage.get("prompt_tokens") or 0

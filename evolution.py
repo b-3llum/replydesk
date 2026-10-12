@@ -1,4 +1,4 @@
-"""Data for the admin page's "Prompt evolution" card.
+"""Data for the "Prompt evolution" card on the admin Reviews page.
 
     import evolution
     evo = evolution.load()   # a dict, or None until evolve/results.json is written and complete
@@ -72,8 +72,8 @@ def cached():
 
 def _summarize(results):
     rounds = _rounds(results)
-    baseline = _number(results, "baseline_holdout", "baseline_heldout", "holdout_baseline", "v0_holdout")
-    best = _number(results, "best_holdout", "best_heldout", "holdout_best")
+    baseline = _number(results, "baseline_holdout")
+    best = _number(results, "best_holdout")
     improvement = None
     if baseline and best is not None:
         improvement = (best - baseline) / baseline * 100
@@ -92,12 +92,11 @@ def _summarize(results):
     }
 
 
-def _number(row, *keys):
-    """The value of the first key that holds a real number, as a float; None if none does."""
-    for key in keys:
-        value = row.get(key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return float(value)
+def _number(row, key):
+    """row[key] as a float when it is a real number; None otherwise."""
+    value = row.get(key)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
     return None
 
 
@@ -109,14 +108,13 @@ def _rounds(results):
     """
     points = {}
     for i, row in enumerate(results.get("rounds") or [], start=1):
-        if isinstance(row, dict):
-            number = row.get("round", i)
-            score = _number(row, "best_train", "best_train_score", "best_score", "score")
-        else:
-            number, score = i, _number({"score": row}, "score")
+        if not isinstance(row, dict):
+            continue
+        number = row.get("round", i)
+        score = _number(row, "best_train")
         if score is not None and isinstance(number, int):
             points[number] = score
-    baseline_train = _number(results, "baseline_train", "v0_train")
+    baseline_train = _number(results, "baseline_train")
     if baseline_train is not None:
         points.setdefault(0, baseline_train)
     return sorted(points.items())
@@ -140,18 +138,23 @@ def _run_prompt(results, prompt_id):
     return _read_text(EVOLVE_DIR / "runs" / run_id / "prompts" / f"{prompt_id}.txt")
 
 
+def _text(results, key):
+    """results[key] stripped when it is a string, else ""."""
+    value = results.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
 def _v0_prompt(results):
-    return _run_prompt(results, "v0") or _read_text(EVOLVE_DIR / "prompts" / "v0.txt")
+    return (_text(results, "baseline_prompt") or _run_prompt(results, "v0")
+            or _read_text(EVOLVE_DIR / "prompts" / "v0.txt"))
 
 
 def _best_prompt(results, v0_prompt):
-    best_id = str(results.get("best_prompt_id") or results.get("best_id") or "")
+    best_id = str(results.get("best_prompt_id") or "")
     if best_id == "v0":
         return v0_prompt
-    for key in ("best_prompt", "best_prompt_text"):
-        if isinstance(results.get(key), str) and results[key].strip():
-            return results[key].strip()
-    return _run_prompt(results, best_id) or _read_text(EVOLVE_DIR / "prompts" / "best.txt")
+    return (_text(results, "best_prompt") or _run_prompt(results, best_id)
+            or _read_text(EVOLVE_DIR / "prompts" / "best.txt"))
 
 
 # ---------------------------------------------------------------- before/after sample

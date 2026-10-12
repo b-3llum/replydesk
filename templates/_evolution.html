@@ -1,13 +1,14 @@
-{# Prompt evolution card for the admin page: {% include "_evolution.html" %} with evo = evolution.load().
-   evo is None while the evolve run is going; data-evo-pending lets the page's polling reload. #}
+{# Prompt evolution card on the admin Reviews page: evo = app.evolution_card(), None while it loads and
+   when there is no evolve/results.json (evo_missing). data-evo-pending lets the layout's stats poll
+   reload the page once a loading card is ready. #}
 {% import "_icons.html" as ic %}
-{% if evo is not defined or evo is none %}
-<section class="card evo" data-evo-pending>
+{% if evo is none %}
+<section class="card evo"{% if not evo_missing %} data-evo-pending{% endif %}>
   <div class="card-head">
     <span class="chip">{{ ic.icon("trend", 16) }}</span>
     <h2>Prompt evolution</h2>
   </div>
-  <p class="muted">Evolution run in progress</p>
+  <p class="muted">{% if evo_missing %}No evolution run yet. Run python -m evolve.run to start one.{% else %}Evolution run in progress{% endif %}</p>
 </section>
 {% else %}
 <section class="card evo">
@@ -31,7 +32,7 @@
         {% if evo.improvement_pct is not none and evo.improvement_pct > 0 %}
         <span class="pill tone-green">+{{ "%.1f" | format(evo.improvement_pct) }}% better</span>
         {% elif evo.improvement_pct is not none %}
-        <span class="pill tone-neutral">{{ "%+.1f" | format(evo.improvement_pct) }}%, not better</span>
+        <span class="pill tone-gray">{{ "%+.1f" | format(evo.improvement_pct) }}%, not better</span>
         {% endif %}
       </div>
     </div>
@@ -76,18 +77,15 @@
 </section>
 {% endif %}
 <script>
-// "Show diff" on the Prompt evolution card. Bound once on document, so it survives the card being re-rendered.
-if (!window.evoToggleBound) {
-  window.evoToggleBound = true;
-  document.addEventListener("click", function (event) {
-    var button = event.target.closest("[data-evo-toggle]");
-    if (!button) return;
-    var diff = document.getElementById(button.getAttribute("aria-controls"));
-    if (!diff) return;
-    var opening = diff.hidden;
-    diff.hidden = !opening;
-    button.setAttribute("aria-expanded", opening ? "true" : "false");
-    button.textContent = opening ? "Hide diff" : "Show diff";
-  });
-}
+// "Show diff" on the Prompt evolution card.
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-evo-toggle]");
+  if (!button) return;
+  var diff = document.getElementById(button.getAttribute("aria-controls"));
+  if (!diff) return;
+  var opening = diff.hidden;
+  diff.hidden = !opening;
+  button.setAttribute("aria-expanded", opening ? "true" : "false");
+  button.textContent = opening ? "Hide diff" : "Show diff";
+});
 </script>

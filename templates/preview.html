@@ -1,6 +1,9 @@
 {% extends "owner.html" %}
 {% block title %}{{ biz.name }}: your review replies{% endblock %}
-{% block body_class %}has-bar{% endblock %}
+{# The unlock card, the sticky bar and the two-column layout show only while some reply is locked. #}
+{% set locked_cards = cards | selectattr("locked") | list %}
+{% block body_class %}{% if locked_cards %}has-bar{% endif %}{% endblock %}
+{% block page_class %}{% if locked_cards %}{{ super() }}{% endif %}{% endblock %}
 
 {% block banner %}
 <p class="paid-band" id="paid-band" hidden>Payment received, unlocking now</p>
@@ -43,12 +46,13 @@
     {% endif %}
   </article>
 {% else %}
-  <div class="card"><p class="empty">No replies are ready yet. Check back in a few minutes.</p></div>
+  {% if unanswered %}<div class="card"><p class="empty">No replies are ready yet. Check back in a few minutes.</p></div>{% endif %}
 {% endfor %}
 </section>
 {% endblock %}
 
 {% block side %}
+{% if locked_cards %}
 {% import "_icons.html" as ic %}
 <aside class="side-col">
   <section class="card">
@@ -61,13 +65,16 @@
     <p class="insight">You paste each reply yourself. Nothing is posted without you.</p>
   </section>
 </aside>
+{% endif %}
 {% endblock %}
 
 {% block after_main %}
+{% if locked_cards %}
 <div class="sticky-bar">
   <a class="btn btn-cta btn-block" href="{{ pay_url }}" data-unlock>Unlock all {{ written }} replies</a>
   <p class="unlock-price">${{ price }} one time</p>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

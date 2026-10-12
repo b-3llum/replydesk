@@ -10,14 +10,14 @@
   <aside class="sidebar">
     <a class="logo" href="/"><span class="logo-dot"></span>ReplyDesk</a>
     <p class="nav-section">Pipeline</p>
-    <nav class="nav">
-      <a class="nav-item{{ ' is-active' if active == 'businesses' }}" href="/admin{{ q }}">{{ ic.icon("store", 16) }}Businesses</a>
-      <a class="nav-item{{ ' is-active' if active == 'reviews' }}" href="/admin/reviews{{ q }}">{{ ic.icon("message", 16) }}Reviews</a>
-      <a class="nav-item{{ ' is-active' if active == 'orders' }}" href="/admin/orders{{ q }}">{{ ic.icon("receipt", 16) }}Orders</a>
+    <nav class="nav" aria-label="Pipeline">
+      <a class="nav-item{{ ' is-active' if active == 'businesses' }}" href="/admin{{ q }}"{% if active == 'businesses' %} aria-current="page"{% endif %}>{{ ic.icon("store", 16) }}Businesses</a>
+      <a class="nav-item{{ ' is-active' if active == 'reviews' }}" href="/admin/reviews{{ q }}"{% if active == 'reviews' %} aria-current="page"{% endif %}>{{ ic.icon("message", 16) }}Reviews</a>
+      <a class="nav-item{{ ' is-active' if active == 'orders' }}" href="/admin/orders{{ q }}"{% if active == 'orders' %} aria-current="page"{% endif %}>{{ ic.icon("receipt", 16) }}Orders</a>
     </nav>
     <p class="nav-section">Today</p>
-    <nav class="nav">
-      <a class="nav-item{{ ' is-active' if active == 'outreach' }}" href="/admin/outreach{{ q }}">{{ ic.icon("send", 16) }}Outreach</a>
+    <nav class="nav" aria-label="Today">
+      <a class="nav-item{{ ' is-active' if active == 'outreach' }}" href="/admin/outreach{{ q }}"{% if active == 'outreach' %} aria-current="page"{% endif %}>{{ ic.icon("send", 16) }}Outreach</a>
     </nav>
   </aside>
 
@@ -29,8 +29,6 @@
 
 {% block scripts %}
 <script>
-var ADMIN_KEY = {{ key|tojson }};
-
 // Copy buttons that carry their text: preview links, outreach texts, phone numbers.
 document.addEventListener("click", function (event) {
   var button = event.target.closest("[data-copy-value]");
@@ -60,22 +58,25 @@ document.querySelectorAll("[data-tab]").forEach(function (tab) {
   });
 });
 
-// Refresh the numbers every 15 seconds.
+// Refresh the numbers every 15 seconds, on pages that have some or a pending evolution card.
+function count(n) { return n.toLocaleString("en-US"); }  // 1,785, as the server writes it
+function cost(n) { return n.toFixed(4); }
 var FORMAT = {
-  businesses: function (n) { return n.toLocaleString(); },
-  reviews: function (n) { return n.toLocaleString(); },
-  unanswered: function (n) { return n.toLocaleString(); },
-  replies_ready: function (n) { return n.toLocaleString(); },
-  revenue: function (n) { return n.toLocaleString(); },
-  revenue_today: function (n) { return n.toLocaleString(); },
-  llm_calls: function (n) { return n.toLocaleString(); },
-  tokens_in: function (n) { return n.toLocaleString(); },
-  tokens_out: function (n) { return n.toLocaleString(); },
-  est_cost: function (n) { return n.toFixed(4); },
-  cost_per_business: function (n) { return n.toFixed(4); }
+  businesses: count,
+  reviews: count,
+  unanswered: count,
+  replies_ready: count,
+  revenue: count,
+  revenue_today: count,
+  llm_calls: count,
+  tokens_in: count,
+  tokens_out: count,
+  est_cost: cost,
+  cost_per_business: cost
 };
 function refreshStats() {
-  fetch("/admin/stats.json?key=" + encodeURIComponent(ADMIN_KEY))
+  // The rd_admin cookie signs this in, so the key stays out of the URL and the access log.
+  fetch("/admin/stats.json")
     .then(function (response) { return response.ok ? response.json() : null; })
     .then(function (s) {
       if (!s) return;
@@ -88,6 +89,6 @@ function refreshStats() {
     })
     .catch(function () {});
 }
-setInterval(refreshStats, 15000);
+if (document.querySelector("[data-stat], [data-evo-pending]")) setInterval(refreshStats, 15000);
 </script>
 {% endblock %}

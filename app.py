@@ -1,10 +1,24 @@
-"""ReplyDesk web app: the owner's preview page, the paid full set, and the Stripe return page.
+"""ReplyDesk web app: the landing page, the owner's preview and paid full set, the admin and the Reply Studio.
 
     python run.py serve          (uvicorn on 0.0.0.0:8000)
 
-    GET /p/{slug}?t=token        preview: 5 replies readable, the rest locked (real text never sent)
-    GET /full/{slug}?t=token     every reply, once the business has paid
-    GET /thanks                  where Stripe sends the owner after paying
+    GET  /                               landing page (?plan=monthly: waitlist form, ?sent=1: request sent)
+    POST /find                           search scanned businesses by name or Google Maps link
+    POST /request                        save a lead: business name, phone, Maps link, plan
+    GET  /health                         store check (JSON)
+
+    GET  /p/{slug}?t=token               preview: 5 replies readable, the rest locked (real text never sent)
+    GET  /p/{slug}/status.json?t=token   {"paid": ...}, polled by the preview after payment
+    GET  /full/{slug}?t=token            every reply, once the business has paid
+    GET  /thanks                         where Stripe sends the owner after paying
+
+    GET  /admin, /admin/reviews, /admin/orders, /admin/outreach    (?key= or the rd_admin cookie)
+    GET  /admin/stats.json               the dashboard numbers, polled every 15 s
+    POST /admin/mark-paid/{slug}, /admin/mark-texted/{slug}
+    GET  /admin/export.csv               the outreach list
+
+    GET  /studio/{slug}?t=token          Reply Studio, plus the 4 JSON endpoints listed in its section below
+    /static                              style.css
 """
 import hashlib
 import hmac
@@ -28,13 +42,17 @@ import config
 import evolution
 import llm
 import outreach
+import quality
 import store
+import studio
 
 SHOWCASE_STARS = (1, 2, 3, 5, 4)  # the preview opens with one written review of each, in this order
 FREE_CARDS = 5  # readable cards on the preview; every card after these is locked
-MAX_CARDS = 200  # cap per page, however many reviews pile up over re-scrapes
+MAX_CARDS = 200  # cap on the preview, however many reviews pile up over re-scrapes
 LOREM = ("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor "
          "incididunt ut labore et dolore magna aliqua").split()
+# DEMO_MODE=1 (.env, env or setx): a tour on the home page and an admin that opens without a key. Off unless set.
+DEMO_MODE = (config.get("DEMO_MODE") or "").lower() in ("1", "true", "yes")
 
 
 @asynccontextmanager
@@ -93,6 +111,26 @@ def health():
     return {"ok": True, "store": store.BACKEND, "db_ms": round((time.time() - started) * 1000)}
 
 
+# ---------------------------------------------------------------- shared caches
+
+STATS_TTL = 5  # seconds; every open admin tab polls stats.json, and the home page shows the totals
+_pool = ThreadPoolExecutor(max_workers=6)
+_cache = {}  # name -> (time, value), kept for STATS_TTL
+
+
+def _cached(name, fn):
+    hit = _cache.get(name)
+    if hit is None or time.time() - hit[0] > STATS_TTL:
+        hit = _cache[name] = (time.time(), fn())
+    return hit[1]
+
+
+def cached_stats():
+    return _cached("stats", store.stats)
+
+
+# ---------------------------------------------------------------- owner pages
+
 def business_for(slug, token):
     """The business, or 404 for an unknown slug and 403 for a wrong token."""
     biz = store.get_business(slug)
@@ -113,23 +151,6 @@ def payment_url(slug):
     return link + separator + urllib.parse.urlencode({"client_reference_id": slug})
 
 
-def parse_date(iso):
-    if not iso:
-        return None
-    try:
-        dt = datetime.fromisoformat(str(iso))
-    except ValueError:
-        return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-
-
-def tone(stars):
-    """Pill color for a star rating: green for 4-5, amber for 3, red for 1-2."""
-    if stars >= 4:
-        return "green"
-    return "amber" if stars == 3 else "red"
-
-
 def ready_reviews(reviews):
     """Unanswered reviews that have a reply written, in the order given (newest first)."""
     return [r for r in reviews if r.get("owner_replied") is False and r.get("reply")]
@@ -137,14 +158,12 @@ def ready_reviews(reviews):
 
 def stats(reviews):
     unanswered = [r for r in reviews if r.get("owner_replied") is False]
-    dates = [d for d in (parse_date(r.get("date")) for r in unanswered) if d]
     return {
         "total": len(reviews),
         "unanswered": len(unanswered),
         "unanswered_pct": round(100 * len(unanswered) / len(reviews)) if reviews else 0,
         "low_unanswered": sum(1 for r in unanswered if (r.get("stars") or 0) <= 2),
         "written": len(ready_reviews(reviews)),
-        "oldest_days": (datetime.now(timezone.utc) - min(dates)).days if dates else None,
     }
 
 
@@ -168,17 +187,15 @@ def preview_order(ready):
 def card(review, locked=False):
     """Template data for one review card. A locked card gets lorem ipsum with the same word count
     instead of the reply, so the real text never reaches the browser."""
-    stars = int(review.get("stars") or 0)
     author = (review.get("author") or "").strip() or "Google user"
     reply = review["reply"].strip()
     if locked:
         reply = " ".join(LOREM[i % len(LOREM)] for i in range(len(reply.split())))
-    dt = parse_date(review.get("date"))
+    dt = store.parse_iso(review.get("date"))
     return {
         "author": author,
         "initial": author[0].upper(),
-        "stars": stars,
-        "tone": tone(stars),
+        "stars": int(review.get("stars") or 0),
         "date": f"{dt:%b} {dt.day}, {dt.year}" if dt else "",
         "text": (review.get("text") or "").strip(),
         "reply": reply,
@@ -213,7 +230,7 @@ def full(request: Request, slug: str, t: str = ""):
         query = urllib.parse.urlencode({"t": t})
         return RedirectResponse(f"/p/{urllib.parse.quote(slug)}?{query}", status_code=303)
     reviews = store.reviews_for(slug)
-    cards = [card(r) for r in ready_reviews(reviews)[:MAX_CARDS]]
+    cards = [card(r) for r in ready_reviews(reviews)]  # no MAX_CARDS cap: they paid for every reply
     return templates.TemplateResponse(request, "full.html", {
         "biz": biz, "cards": cards, **stats(reviews)})
 
@@ -226,8 +243,6 @@ def thanks(request: Request):
 # ---------------------------------------------------------------- landing page and leads
 
 PLANS = ("one-time", "monthly")
-# DEMO_MODE=1 in .env: judges get a tour on the home page and the admin opens without a key.
-DEMO_MODE = (config.get("DEMO_MODE") or "").lower() in ("1", "true", "yes")
 
 
 def _examples():
@@ -239,8 +254,8 @@ def _examples():
 
 
 def landing_context(**extra):
-    s = cached_stats()  # 5 s cache: the public page must not hammer Atlas
-    unpaid, paid = _examples()
+    s = cached_stats()  # both cached: the public page must not hammer Atlas
+    unpaid, paid = _cached("examples", _examples)
     tour = None
     if DEMO_MODE:
         tour = {"preview": f"/p/{unpaid['_id']}?t={unpaid['preview_token']}" if unpaid else None,
@@ -312,37 +327,6 @@ async def request_preview(request: Request):
 
 BUSINESS_ROWS = 300  # caps keep the dashboard fast however much we scrape
 ORDER_ROWS = 50
-STATS_TTL = 5  # seconds; every open admin tab polls stats.json
-_pool = ThreadPoolExecutor(max_workers=6)
-_stats_cache = {"at": 0.0, "value": None}
-
-
-def cached_stats():
-    if _stats_cache["value"] is None or time.time() - _stats_cache["at"] > STATS_TTL:
-        _stats_cache.update(at=time.time(), value=store.stats())
-    return _stats_cache["value"]
-
-
-_evo = {"future": None}
-
-
-def evolution_card(wait=0.3):
-    """Prompt-evolution card data, or None while the run is going. The first load after
-    evolve/results.json appears reads the store (and may make 2 LLM calls), so it runs in the
-    background and the card says "in progress" until it is done; later loads come from memory."""
-    if not evolution.RESULTS_PATH.exists():
-        return None
-    if evolution.cached():
-        return evolution.load()
-    future = _evo["future"]
-    if future is None or future.done():
-        future = _evo["future"] = _pool.submit(evolution.load)
-    try:
-        return future.result(timeout=wait)
-    except FutureTimeout:
-        return None
-
-
 ADMIN_COOKIE = "rd_admin"
 ADMIN_COOKIE_DAYS = 7
 
@@ -360,9 +344,54 @@ def require_admin(key, request=None):
     cookie = request.cookies.get(ADMIN_COOKIE, "") if request is not None else ""
     if expected and cookie and secrets.compare_digest(cookie.encode(), _admin_cookie_value(expected).encode()):
         return expected
-    if DEMO_MODE:  # open for judges; "" keeps the real key out of the page's links and scripts
+    if DEMO_MODE:  # open to everyone; "" sets no remember-me cookie
         return ""
     raise HTTPException(status_code=403, detail="This admin link is not valid")
+
+
+def _admin_or_login(request, key):
+    """(key, None) when allowed in; otherwise (None, the sign-in page) instead of an error."""
+    try:
+        return require_admin(key, request), None
+    except HTTPException:
+        return None, templates.TemplateResponse(request, "admin_login.html", {"error": bool(key)},
+                                                status_code=403 if key else 200)
+
+
+def _admin_page(request, key, template, context):
+    """Render one admin page (templates/admin/...) and remember a browser that came with the key.
+    The page gets key="": the cookie signs in its links, forms and stats poll, so the key stays out
+    of URLs and the server's access log."""
+    response = templates.TemplateResponse(request, template, dict(context, key=""))
+    if key:  # so the plain /admin link (home page footer) opens the panel next time
+        response.set_cookie(ADMIN_COOKIE, _admin_cookie_value(key), max_age=ADMIN_COOKIE_DAYS * 86400, httponly=True,
+                            samesite="lax", secure=request.headers.get("x-forwarded-proto") == "https")
+    return response
+
+
+def back_to_admin():
+    _cache.clear()  # the next poll and the home page show the change
+    return RedirectResponse("/admin#businesses", status_code=303)
+
+
+_evo = {"future": None}
+
+
+def evolution_card(wait=0.3):
+    """Prompt-evolution card data, or None when evolve/results.json is missing or still loading. The
+    first load after results.json appears reads the store (and may make 2 LLM calls), so it runs in the
+    background and the card says "in progress" until it is done; later loads come from memory."""
+    if not evolution.RESULTS_PATH.exists():
+        return None
+    if evolution.cached():
+        return evolution.load()
+    future = _evo["future"]
+    if future is None or future.done():
+        future = _evo["future"] = _pool.submit(evolution.load)
+    try:
+        return future.result(timeout=wait)
+    except FutureTimeout:
+        return None
 
 
 def admin_numbers(s):
@@ -380,39 +409,16 @@ def admin_numbers(s):
 def business_row(b):
     return {"slug": b["_id"], "name": b.get("name") or b["_id"], "category": b.get("category") or "",
             "phone": b.get("phone") or "", "unanswered": b.get("unanswered_count") or 0,
-            "ready": b.get("replies_ready") or 0, "status": b.get("status") or "new",
-            "paid": bool(b.get("paid")), "preview_url": outreach.preview_url(b), "text": outreach.outreach_text(b)}
+            "status": b.get("status") or "new", "paid": bool(b.get("paid")),
+            "preview_url": outreach.preview_url(b), "text": outreach.outreach_text(b)}
 
 
 def local_time(iso):
-    dt = parse_date(iso)
+    dt = store.parse_iso(iso)
     if not dt:
         return ""
     local = dt.astimezone()
     return f"{local:%b} {local.day}, {local.strftime('%I:%M %p').lstrip('0')}"
-
-
-def back_to_admin(key):
-    _stats_cache["value"] = None  # the next poll shows the change
-    return RedirectResponse(f"/admin?{urllib.parse.urlencode({'key': key})}#businesses", status_code=303)
-
-
-def _admin_or_login(request, key):
-    """(key, None) when allowed in; otherwise (None, the sign-in page) instead of an error."""
-    try:
-        return require_admin(key, request), None
-    except HTTPException:
-        return None, templates.TemplateResponse(request, "admin_login.html", {"error": bool(key)},
-                                                status_code=403 if key else 200)
-
-
-def _admin_page(request, key, template, context):
-    """Render one admin page (templates/admin/...) and remember a browser that came with the key."""
-    response = templates.TemplateResponse(request, template, dict(context, key=key))
-    if key:  # so the plain /admin link (home page footer) opens the panel next time
-        response.set_cookie(ADMIN_COOKIE, _admin_cookie_value(key), max_age=ADMIN_COOKIE_DAYS * 86400, httponly=True,
-                            samesite="lax", secure=request.headers.get("x-forwarded-proto") == "https")
-    return response
 
 
 def _today_usage():
@@ -451,13 +457,15 @@ def admin_reviews(request: Request, key: str = ""):
     latest_job = _pool.submit(store.latest_replies, 25)
     today_job = _pool.submit(_today_usage)
     businesses = {b["_id"]: b for b in biz_job.result()}
-    latest = [{"business": businesses[r["business_id"]]["name"], "author": r.get("author") or "Google user",
+    latest = [{"business": businesses[r["business_id"]]["name"],
+               "author": (r.get("author") or "").strip() or "Google user",
                "stars": int(r.get("stars") or 0), "text": _snip(r.get("text"), 110), "reply": _snip(r.get("reply"), 160),
                "studio": f"/studio/{r['business_id']}?t={businesses[r['business_id']]['preview_token']}"}
               for r in latest_job.result() if r.get("business_id") in businesses]
     return _admin_page(request, key, "admin/reviews.html", {
         "active": "reviews", "page_title": "Reviews", "stats": admin_numbers(stats_job.result()), "latest": latest,
-        "evo": evolution_card(), "today": today_job.result(), "model": config.get("LUMINAL_MODEL") or ""})
+        "evo": evolution_card(), "evo_missing": not evolution.RESULTS_PATH.exists(),  # evo is also None while loading
+        "today": today_job.result(), "model": config.get("LUMINAL_MODEL") or ""})
 
 
 @app.get("/admin/orders")
@@ -504,26 +512,26 @@ def admin_stats(request: Request, key: str = ""):
 
 @app.post("/admin/mark-paid/{slug}")
 def admin_mark_paid(request: Request, slug: str, key: str = ""):
-    key = require_admin(key, request)
+    require_admin(key, request)
     if store.get_business(slug) is None:
         raise HTTPException(status_code=404, detail="Not found")
     store.mark_paid(slug, "stripe", config.PRICE_USD)
-    return back_to_admin(key)
+    return back_to_admin()
 
 
 @app.post("/admin/mark-texted/{slug}")
 def admin_mark_texted(request: Request, slug: str, key: str = ""):
-    key = require_admin(key, request)
+    require_admin(key, request)
     if store.get_business(slug) is None:
         raise HTTPException(status_code=404, detail="Not found")
     store.mark_texted(slug)
-    return back_to_admin(key)
+    return back_to_admin()
 
 
 @app.get("/admin/export.csv")
 def admin_export(request: Request, key: str = ""):
     require_admin(key, request)
-    return Response("﻿" + outreach.csv_text(), media_type="text/csv; charset=utf-8",
+    return Response("\ufeff" + outreach.csv_text(), media_type="text/csv; charset=utf-8",  # BOM: Excel reads UTF-8
                     headers={"Content-Disposition": 'attachment; filename="replydesk-outreach.csv"'})
 
 
@@ -536,9 +544,6 @@ def admin_export(request: Request, key: str = ""):
 #     POST /studio/{slug}/review/{rid}/quality.json?t=   {"text"} -> {"quality"} (no LLM call)
 #
 # Nothing here posts to Google or overwrites a saved reply.
-
-import quality  # noqa: E402  (imported here so nothing above this section changes)
-import studio  # noqa: E402
 
 STUDIO_TEXT_CHARS = 2000  # the most reply text the composer endpoints read
 

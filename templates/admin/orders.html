@@ -5,7 +5,7 @@
 <header class="admin-header">
   <div>
     <h1 class="title">Orders</h1>
-    <p class="muted small">$29 one time per business, paid through Stripe. Numbers refresh every 15 seconds.</p>
+    <p class="muted small">${{ price }} one time per business, paid through Stripe. Numbers refresh every 15 seconds.</p>
   </div>
 </header>
 
@@ -44,7 +44,7 @@
   {% if orders %}
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Business</th><th class="num">Amount</th><th>Method</th><th>Paid</th><th></th></tr></thead>
+      <thead><tr><th>Business</th><th class="num">Amount</th><th>Method</th><th>Paid</th><th aria-label="Actions"></th></tr></thead>
       <tbody>
       {% for o in orders %}
         <tr>

@@ -9,7 +9,7 @@ import re
 
 # BANNED through POINTS mirror evolve/score.py exactly (only checks() takes the business as an argument).
 BANNED = ("valued", "feedback", "strive", "apologies for any inconvenience", "sorry you feel")
-EMOJI = re.compile("[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF️‍]")
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\uFE0F\u200D]")
 OFFER = re.compile(
     r"make (it|this|things) right|fix (it|this|that)|set (it|this|things) right|call (me|us)"
     r"|give (me|us) a (call|ring)|reach (out|me|us)|contact (me|us)|ask for me"

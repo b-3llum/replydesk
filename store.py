@@ -3,7 +3,7 @@
     import store
     store.upsert_business({"_id": "joes-pizza", "name": "Joe's Pizza", ...})
 
-REPLYDESK_STORE=json|mongo picks the backend; empty means mongo when MONGODB_URI is set,
+REPLYDESK_STORE=json|mongo picks the backend; empty (or auto) means mongo when MONGODB_URI is set,
 else json. The backend is created on first use, so importing this module never blocks.
 All datetimes are ISO-8601 UTC strings, so both backends hold identical documents.
 """
@@ -40,7 +40,7 @@ def _pick_backend():
     if mode in ("json", "mongo"):
         return mode
     if mode not in ("", "auto"):
-        raise RuntimeError(f"REPLYDESK_STORE must be json, mongo or empty, not {mode!r}")
+        raise RuntimeError(f"REPLYDESK_STORE must be json, mongo, auto or empty, not {mode!r}")
     return "mongo" if config.get("MONGODB_URI") else "json"
 
 
@@ -59,6 +59,17 @@ MONGO_DB = config.get("REPLYDESK_MONGO_DB") or "replydesk"
 
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def parse_iso(value):
+    """ISO-8601 text -> aware datetime (UTC when it has no offset); None when missing or unparseable."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _int(value):
@@ -95,13 +106,8 @@ def _sort_orders(docs):
 
 
 def _local_date(iso):
-    try:
-        dt = datetime.fromisoformat(str(iso))
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone().date()
+    dt = parse_iso(iso)
+    return dt.astimezone().date() if dt else None
 
 
 def _order_stats(orders):
@@ -151,9 +157,9 @@ def _scraped_fields(review):
     return {k: v for k, v in review.items() if k != "_id" and k not in REVIEW_DEFAULTS}
 
 
-def _reply_fields(reply, model, tokens_in, tokens_out):
+def _reply_fields(reply, model, tokens_in, tokens_out, generated_at=None):
     return {"reply": reply, "model": model, "tokens_in": _int(tokens_in),
-            "tokens_out": _int(tokens_out), "generated_at": _now()}
+            "tokens_out": _int(tokens_out), "generated_at": generated_at or _now()}
 
 
 # ---------------------------------------------------------------- JSON backend
@@ -175,7 +181,8 @@ def _parse(raw):
 class JsonStore:
     """JSON file store, safe across threads (one RLock) and processes (lock file + atomic replace).
 
-    File layout: {"businesses": {slug: doc}, "reviews": {review_id: doc}, "orders": [doc, ...]}
+    File layout: {"businesses": {slug: doc}, "reviews": {review_id: doc}, "orders": [doc, ...],
+                  "requests": [doc, ...]}
     """
 
     def __init__(self, path):
@@ -378,8 +385,8 @@ class JsonStore:
             [r for r in data["reviews"].values()
              if _is_pending(r) and (slug is None or r.get("business_id") == slug)]))
 
-    def save_reply(self, review_id, reply, model, tokens_in, tokens_out):
-        fields = _reply_fields(reply, model, tokens_in, tokens_out)
+    def save_reply(self, review_id, reply, model, tokens_in, tokens_out, generated_at=None):
+        fields = _reply_fields(reply, model, tokens_in, tokens_out, generated_at)
 
         def apply(data):
             review = data["reviews"].get(review_id)
@@ -477,10 +484,11 @@ class JsonStore:
         return self._read(get)
 
     def export_all(self):
-        """Copies of every document, for migration and backups."""
+        """Copies of every document (businesses, reviews, orders, requests), for migration and backups."""
         return self._read(lambda data: {"businesses": list(data["businesses"].values()),
                                         "reviews": list(data["reviews"].values()),
-                                        "orders": list(data["orders"])})
+                                        "orders": list(data["orders"]),
+                                        "requests": list(data["requests"])})
 
     def close(self):
         pass
@@ -489,7 +497,7 @@ class JsonStore:
 # ---------------------------------------------------------------- Mongo backend
 
 class MongoStore:
-    """MongoDB store: collections businesses / reviews / orders in db_name."""
+    """MongoDB store: collections businesses / reviews / orders / requests in db_name."""
 
     def __init__(self, uri, db_name="replydesk"):
         uri = _escape_credentials(uri)
@@ -553,9 +561,9 @@ class MongoStore:
             query["business_id"] = slug
         return _sort_reviews(list(self.db.reviews.find(query)))
 
-    def save_reply(self, review_id, reply, model, tokens_in, tokens_out):
+    def save_reply(self, review_id, reply, model, tokens_in, tokens_out, generated_at=None):
         result = self.db.reviews.update_one(
-            {"_id": review_id}, {"$set": _reply_fields(reply, model, tokens_in, tokens_out)})
+            {"_id": review_id}, {"$set": _reply_fields(reply, model, tokens_in, tokens_out, generated_at)})
         if result.matched_count == 0:
             raise KeyError(f"unknown review {review_id!r}")
 
@@ -681,8 +689,10 @@ def pending_reviews(slug=None):
     return _store().pending_reviews(slug)
 
 
-def save_reply(review_id, reply, model, tokens_in, tokens_out):
-    _store().save_reply(review_id, reply, model, tokens_in, tokens_out)
+def save_reply(review_id, reply, model, tokens_in, tokens_out, generated_at=None):
+    """Save a review's reply and token totals. generated_at (ISO UTC) defaults to now; the diversity
+    pass passes the old value when it kept or only trimmed the text. KeyError for an unknown review."""
+    _store().save_reply(review_id, reply, model, tokens_in, tokens_out, generated_at)
 
 
 def save_tags(review_id, tags):
@@ -738,34 +748,43 @@ def stats():
     return _store().stats()
 
 
+def _insert_missing(collection, docs, match):
+    """Insert each doc unless one with the same values for the match keys exists -> (inserted, skipped)."""
+    inserted = skipped = 0
+    for doc in docs:
+        doc = {k: v for k, v in doc.items() if k != "_id"}  # Mongo assigns its own ObjectId
+        if collection.find_one({k: doc.get(k) for k in match}):
+            skipped += 1
+        else:
+            collection.insert_one(doc)
+            inserted += 1
+    return inserted, skipped
+
+
 def migrate_json_to_mongo(json_path=None, uri=None, db_name=None):
-    """Copy the JSON store into Mongo (JSON wins; orders matched on business_id + paid_at). Idempotent."""
+    """Copy the JSON store into Mongo. Idempotent. JSON wins: businesses are replaced, reviews get every
+    JSON field set (fields only Mongo has, like studio tags, stay), and orders and requests are added
+    once, matched on business_id + paid_at and on name + phone + created_at."""
     json_path = os.fspath(json_path or JSON_PATH)
     if not os.path.exists(json_path):
         raise FileNotFoundError(f"no JSON store at {json_path}")
     data = JsonStore(json_path).export_all()
     mongo = MongoStore(uri or config.require("MONGODB_URI"), db_name or MONGO_DB)
-    inserted = skipped = 0
     try:
         db = mongo.db
         if data["businesses"]:
             db.businesses.bulk_write([ReplaceOne({"_id": b["_id"]}, b, upsert=True)
                                       for b in data["businesses"]])
         if data["reviews"]:
-            db.reviews.bulk_write([ReplaceOne({"_id": r["_id"]}, r, upsert=True)
-                                   for r in data["reviews"]])
-        for order in data["orders"]:
-            order = {k: v for k, v in order.items() if k != "_id"}  # Mongo assigns its own ObjectId
-            if db.orders.find_one({"business_id": order.get("business_id"),
-                                   "paid_at": order.get("paid_at")}):
-                skipped += 1
-            else:
-                db.orders.insert_one(order)
-                inserted += 1
+            db.reviews.bulk_write([UpdateOne({"_id": r["_id"]}, {"$set": {k: v for k, v in r.items() if k != "_id"}},
+                                             upsert=True) for r in data["reviews"]])
+        orders = _insert_missing(db.orders, data["orders"], ("business_id", "paid_at"))
+        leads = _insert_missing(db.requests, data["requests"], ("name", "phone", "created_at"))
     finally:
         mongo.close()
     return {"businesses": len(data["businesses"]), "reviews": len(data["reviews"]),
-            "orders_inserted": inserted, "orders_skipped": skipped}
+            "orders_inserted": orders[0], "orders_skipped": orders[1],
+            "requests_inserted": leads[0], "requests_skipped": leads[1]}
 
 
 # ---------------------------------------------------------------- secret hygiene

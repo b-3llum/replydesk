@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 import config
+import store
 
 API = "https://api.apify.com/v2"
 PLACES_ACTOR = "compass/crawler-google-places"
@@ -109,7 +110,7 @@ def _finish_inflight_run(act, started, run_input):
                 and _same_input(r, run_input)), None)
     if run is None:  # it may have finished between the 408 and this lookup
         since = started - timedelta(minutes=2)
-        run = next((r for r in runs if (_parse_dt(r.get("startedAt")) or since) > since
+        run = next((r for r in runs if (store.parse_iso(r.get("startedAt")) or since) > since
                     and _same_input(r, run_input)), None)
     if run is None:
         raise RuntimeError(f"Apify sync call for {act} timed out and its run could not be found")
@@ -173,19 +174,9 @@ def reviews_input(places):
 
 # ---------- normalizing ----------
 
-def _parse_dt(value):
-    if not value:
-        return None
-    try:
-        dt = datetime.fromisoformat(str(value))
-    except ValueError:
-        return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-
-
 def iso_utc(value):
     """'2025-01-15T10:30:00.000Z' -> '2025-01-15T10:30:00+00:00'; None when missing or unparseable."""
-    dt = _parse_dt(value)
+    dt = store.parse_iso(value)
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds") if dt else None
 
 
@@ -237,8 +228,6 @@ def normalize_review(item, business_id):
 
 def scrape(query, max_places=10, use_cache=False):
     """Discover places, fetch their newest reviews, save businesses with >= 15 reviews. Returns them."""
-    import store
-
     store.get_business("")  # the backend connects lazily: fail here, before any paid Apify run
     print(f"Searching Google Maps: {query!r} (max {max_places} places) ...", flush=True)
     places, seen = [], set()
@@ -284,8 +273,6 @@ def scrape(query, max_places=10, use_cache=False):
 
 def print_table(businesses, summary=None):
     """Businesses sorted by unanswered reviews, then one summary line (scrape counts if given)."""
-    import store
-
     rows = sorted(businesses, key=lambda b: (-(b.get("unanswered_count") or 0), b.get("name") or ""))
     print(f"{'name':34}  {'phone':16}  {'reviews':>7}  {'unanswered':>10}  slug")
     print("-" * 100)

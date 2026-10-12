@@ -56,7 +56,7 @@
       </div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Business</th><th class="num">Unanswered</th><th>Status</th><th>Message</th><th></th></tr></thead>
+          <thead><tr><th>Business</th><th class="num">Unanswered</th><th>Status</th><th>Message</th><th aria-label="Actions"></th></tr></thead>
           <tbody>
           {% for r in rows %}
             <tr data-group="{{ 'paid' if r.paid else ('texted' if r.status == 'texted' else 'new') }}">
@@ -83,7 +83,7 @@
       </div>
       <p class="empty" id="tab-empty" hidden>No businesses here yet.</p>
       {% else %}
-      <p class="empty">No businesses yet. Run python run.py scrape to find some.</p>
+      <p class="empty">No businesses yet. Run python run.py scrape --query "restaurants Philadelphia" to find some.</p>
       {% endif %}
     </section>
   </div>
@@ -130,7 +130,7 @@
             <p class="muted small">{{ q.phone }} · {{ "$19/mo waitlist" if q.plan == "monthly" else "$29 one time" }} · {{ q.when }}</p>
             {% if q.maps_link %}<p class="small"><a href="{{ q.maps_link }}" target="_blank" rel="noopener noreferrer">Maps link</a></p>{% endif %}
           </div>
-          <button type="button" class="btn btn-secondary btn-sm" data-copy-value="{{ q.phone }}">Copy</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-copy-value="{{ q.phone }}" aria-label="Copy phone number">Copy</button>
         </li>
       {% endfor %}
       </ul>

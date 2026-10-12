@@ -63,10 +63,9 @@ a { color: inherit; }
 .tone-amber { background: var(--pill-amber-bg); color: var(--pill-amber-text); }
 .tone-red { background: var(--pill-red-bg); color: var(--pill-red-text); }
 .tone-blue { background: var(--pill-blue-bg); color: var(--pill-blue-text); }
-.tone-gray, .tone-grey, .tone-neutral { background: var(--pill-gray-bg); color: var(--pill-gray-text); }
-.pill-dark { background: var(--text); color: #fff; }
+.tone-gray { background: var(--pill-gray-bg); color: var(--pill-gray-text); }
 
-/* Buttons: primary is the only dark thing on a page; green CTA is for paying and unlocking */
+/* Buttons: primary is the dark button; green CTA is for paying and unlocking */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -82,7 +81,7 @@ a { color: inherit; }
   text-decoration: none;
   cursor: pointer;
 }
-.btn-primary, .btn-dark { background: var(--text); color: #fff; }
+.btn-primary { background: var(--text); color: #fff; }
 .btn-secondary { background: var(--card); color: var(--text); border-color: var(--border); }
 .btn-cta { background: var(--accent); color: var(--accent-dark); }
 .btn-block { display: flex; width: 100%; }
@@ -156,7 +155,7 @@ a { color: inherit; }
   color: #fff;
   font: italic 700 12px/1 Georgia, "Times New Roman", serif;
 }
-.paid-banner, .paid-band {
+.paid-band {
   margin-bottom: 16px;
   padding: 12px 16px;
   border-radius: 14px;
@@ -242,16 +241,10 @@ a { color: inherit; }
 }
 body.has-bar { padding-bottom: 108px; }
 
-/* Thanks and error pages */
+/* Thanks, error and admin sign-in pages */
 .center { display: flex; align-items: center; justify-content: center; min-height: 70vh; }
 .thanks { max-width: 420px; text-align: center; }
 .login { display: flex; flex-direction: column; gap: 12px; width: 100%; text-align: left; }
-.tour { margin-bottom: 16px; }
-.tour .chip .logo-dot { width: 12px; height: 12px; }
-.tour-links { display: grid; gap: 10px; }
-.tour-links .btn { flex-direction: column; align-items: flex-start; text-align: left; }
-.tour-sub { color: inherit; font-size: 12px; font-weight: 400; opacity: .75; }
-@media (min-width: 720px) { .tour-links { grid-template-columns: repeat(2, 1fr); } }
 .login .logo-sm { margin-bottom: 0; }
 
 /* Landing page (/) */
@@ -261,6 +254,12 @@ body.has-bar { padding-bottom: 108px; }
 .hero-title { margin: 0 0 12px; font-size: 30px; font-weight: 700; line-height: 1.15; letter-spacing: -.01em; }
 .hero-sub { margin-bottom: 20px; font-size: 16px; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.tour { margin-bottom: 16px; }
+.tour .chip .logo-dot { width: 12px; height: 12px; }
+.tour-links { display: grid; gap: 10px; }
+.tour-links .btn { flex-direction: column; align-items: flex-start; text-align: left; }
+.tour-sub { color: inherit; font-size: 12px; font-weight: 400; opacity: .75; }
+@media (min-width: 720px) { .tour-links { grid-template-columns: repeat(2, 1fr); } }
 .section-title { margin: 28px 0 12px; font-size: 18px; font-weight: 600; }
 .grid-3, .grid-2 { display: grid; gap: 12px; }
 .step-num {

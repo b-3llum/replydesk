@@ -18,7 +18,7 @@ import store
 SOURCE = "Google Reviews"
 SNIPPET_CHARS = 110
 RATING_ONLY = "Rated only, no written review."
-LABELS = {"negative": "Negative", "neutral": "Unanswered", "positive": "Positive"}
+LABELS = {"negative": "Negative", "neutral": "Unanswered", "positive": "Positive"}  # the pill; studio.html's filters match
 GROUPS = ("negative", "neutral", "positive")  # list order: complaints first
 DEFAULT_TONES = {"negative": "empathetic", "neutral": "professional", "positive": "warm"}
 ACTIONS = ("regenerate", "shorten")
