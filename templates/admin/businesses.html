@@ -1,0 +1,99 @@
+{% extends "admin/_layout.html" %}
+
+{% block page %}
+{% import "_icons.html" as ic %}
+{% set n_paid = rows | selectattr("paid") | list | length %}
+{% set n_new = rows | rejectattr("paid") | selectattr("status", "equalto", "new") | list | length %}
+{% set n_texted = rows | rejectattr("paid") | selectattr("status", "equalto", "texted") | list | length %}
+<header class="admin-header">
+  <div>
+    <h1 class="title">Businesses</h1>
+    <p class="muted small">Numbers refresh every 15 seconds.</p>
+  </div>
+  <a class="btn btn-secondary" href="/admin/export.csv?key={{ key|urlencode }}">Export CSV</a>
+</header>
+
+<section class="card metrics">
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("store") }}</span>
+    <span class="metric-label">Businesses scanned</span>
+    <span class="metric-number" data-stat="businesses">{{ "{:,}".format(stats.businesses) }}</span>
+    <span class="pill tone-gray">{{ n_texted + n_paid }} contacted</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("message") }}</span>
+    <span class="metric-label">Reviews scanned</span>
+    <span class="metric-number" data-stat="reviews">{{ "{:,}".format(stats.reviews) }}</span>
+    <span class="pill tone-red"><span data-stat="unanswered_pct">{{ stats.unanswered_pct }}</span>% unanswered</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("pen") }}</span>
+    <span class="metric-label">Replies generated</span>
+    <span class="metric-number" data-stat="replies_ready">{{ "{:,}".format(stats.replies_ready) }}</span>
+    <span class="pill tone-green"><span data-stat="llm_calls">{{ "{:,}".format(stats.llm_calls) }}</span> on Luminal</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("dollar") }}</span>
+    <span class="metric-label">Paid</span>
+    <span class="metric-number" data-stat="paid_orders">{{ stats.paid_orders }}</span>
+    <span class="pill tone-green">$<span data-stat="revenue">{{ "{:,}".format(stats.revenue) }}</span> total</span>
+  </div>
+</section>
+
+<section class="card" id="businesses">
+  <div class="card-head">
+    <span class="chip">{{ ic.icon("store", 16) }}</span>
+    <h2>Businesses<span class="sub">Most unanswered reviews first</span></h2>
+  </div>
+  {% if rows %}
+  <div class="tabs tabs-row" role="group" aria-label="Filter businesses">
+    <button type="button" class="tab is-active" data-tab="all" aria-pressed="true">All <span class="tab-count">{{ rows | length }}</span></button>
+    <button type="button" class="tab" data-tab="new" aria-pressed="false">Not contacted <span class="tab-count">{{ n_new }}</span></button>
+    <button type="button" class="tab" data-tab="texted" aria-pressed="false">Contacted <span class="tab-count">{{ n_texted }}</span></button>
+    <button type="button" class="tab" data-tab="paid" aria-pressed="false">Paid <span class="tab-count">{{ n_paid }}</span></button>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Business</th><th>Category</th><th class="num">Unanswered</th><th>Preview</th>
+            <th>Status</th><th>Paid</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr data-group="{{ 'paid' if r.paid else ('texted' if r.status == 'texted' else 'new') }}">
+          <td><p class="strong">{{ r.name }}</p><p class="muted small">{{ r.phone or "no phone" }}</p></td>
+          <td class="muted">{{ r.category }}</td>
+          <td class="num strong{{ ' num-red' if r.unanswered > 30 }}">{{ r.unanswered }}</td>
+          <td><button type="button" class="btn btn-secondary btn-icon" data-copy-value="{{ r.preview_url }}"
+                      aria-label="Copy preview link" title="Copy preview link">{{ ic.icon("copy", 16) }}</button></td>
+          <td>{% if r.status == "new" and not r.paid %}<span class="pill tone-gray">Not contacted</span>{% else %}<span class="pill tone-blue">Contacted</span>{% endif %}</td>
+          <td>{% if r.paid %}<span class="pill tone-green">Paid</span>{% else %}<span class="pill tone-gray">Unpaid</span>{% endif %}</td>
+          <td>
+            <div class="actions">
+              {% if r.status == "new" and not r.paid %}
+              <form method="post" action="/admin/mark-texted/{{ r.slug }}?key={{ key|urlencode }}">
+                <button class="btn btn-secondary btn-sm">Texted</button>
+              </form>
+              {% endif %}
+              <form method="post" action="/admin/mark-paid/{{ r.slug }}?key={{ key|urlencode }}"
+                    data-confirm="Mark {{ r.name }} as paid (${{ price }})?">
+                <button class="btn btn-secondary btn-sm"{{ " disabled" if r.paid }}>{{ "Paid" if r.paid else "Mark paid" }}</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="empty" id="tab-empty" hidden>No businesses here yet.</p>
+  {% else %}
+  <p class="empty">No businesses yet. Run python run.py scrape to find some.</p>
+  {% endif %}
+  <p class="insight">Businesses with 30+ unanswered reviews close fastest. Call those first.</p>
+</section>
+
+<div class="info info-bottom"><span class="info-icon" aria-hidden="true">i</span>
+  <p><strong>{{ "{:,}".format(today.replies) }} replies generated on Luminal today for ${{ "%.2f"|format(today.cost) }}.</strong> That is the whole cost of goods.</p>
+</div>
+{% endblock %}

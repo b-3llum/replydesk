@@ -451,6 +451,14 @@ class JsonStore:
 
         return self._read(count)
 
+    def latest_replies(self, limit=25):
+        def pick(data):
+            rows = [dict(r) for r in data["reviews"].values() if r.get("reply") and r.get("owner_replied") is False
+                    and r.get("model") not in (None, "template")]
+            return sorted(rows, key=lambda r: r.get("generated_at") or "", reverse=True)[:limit]
+
+        return self._read(pick)
+
     def stats(self):
         def get(data):
             reviews = list(data["reviews"].values())
@@ -597,6 +605,10 @@ class MongoStore:
         row = rows[0] if rows else {}
         return {"replies": row.get("n", 0), "tokens_in": row.get("tin", 0), "tokens_out": row.get("tout", 0)}
 
+    def latest_replies(self, limit=25):
+        query = {"reply": {"$ne": None}, "owner_replied": False, "model": {"$nin": [None, "template"]}}
+        return list(self.db.reviews.find(query).sort("generated_at", -1).limit(limit))
+
     def stats(self):
         reviews = self.db.reviews
         tokens = list(reviews.aggregate([{"$group": {
@@ -707,6 +719,11 @@ def list_requests(limit=50):
 def replies_since(iso):
     """LLM replies written at or after iso (UTC ISO string): {replies, tokens_in, tokens_out}."""
     return _store().replies_since(iso)
+
+
+def latest_replies(limit=25):
+    """The newest LLM-written replies to unanswered reviews, across all businesses."""
+    return _store().latest_replies(limit)
 
 
 def find_businesses(query, limit=8):

@@ -1,0 +1,94 @@
+{% extends "admin/_layout.html" %}
+
+{% block page %}
+{% import "_icons.html" as ic %}
+<header class="admin-header">
+  <div>
+    <h1 class="title">Reviews</h1>
+    <p class="muted small">Every reply written on Luminal with thinking off. Numbers refresh every 15 seconds.</p>
+  </div>
+</header>
+
+<section class="card metrics">
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("message") }}</span>
+    <span class="metric-label">Reviews scanned</span>
+    <span class="metric-number" data-stat="reviews">{{ "{:,}".format(stats.reviews) }}</span>
+    <span class="pill tone-gray">{{ stats.businesses }} businesses</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("alert") }}</span>
+    <span class="metric-label">Unanswered</span>
+    <span class="metric-number" data-stat="unanswered">{{ "{:,}".format(stats.unanswered) }}</span>
+    <span class="pill tone-red"><span data-stat="unanswered_pct">{{ stats.unanswered_pct }}</span>% of all reviews</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("pen") }}</span>
+    <span class="metric-label">Replies written</span>
+    <span class="metric-number" data-stat="replies_ready">{{ "{:,}".format(stats.replies_ready) }}</span>
+    <span class="pill tone-green"><span data-stat="llm_calls">{{ "{:,}".format(stats.llm_calls) }}</span> on Luminal</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("cpu") }}</span>
+    <span class="metric-label">Reasoning tokens</span>
+    <span class="metric-number" data-stat="reasoning_tokens">{{ stats.reasoning_tokens }}</span>
+    <span class="pill tone-green">thinking off</span>
+  </div>
+</section>
+
+<div class="admin-grid">
+  <div class="admin-col">
+    <section class="card">
+      <div class="card-head">
+        <span class="chip">{{ ic.icon("pen", 16) }}</span>
+        <h2>Latest replies<span class="sub">Newest AI-written replies across every business</span></h2>
+      </div>
+      {% if latest %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Business</th><th>Stars</th><th>Review</th><th>Our reply</th><th></th></tr></thead>
+          <tbody>
+          {% for r in latest %}
+            <tr>
+              <td><p class="strong">{{ r.business }}</p><p class="muted small">{{ r.author }}</p></td>
+              <td class="nowrap"><span class="pill {{ 'tone-red' if r.stars <= 2 else ('tone-amber' if r.stars == 3 else 'tone-green') }}">★ {{ r.stars }}</span></td>
+              <td class="muted small">{{ r.text }}</td>
+              <td class="small">{{ r.reply }}</td>
+              <td><a class="btn btn-secondary btn-sm" href="{{ r.studio }}" target="_blank" rel="noopener">Studio</a></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="empty">No replies written yet. Run python run.py generate --all.</p>
+      {% endif %}
+      <p class="insight">Each reply names one detail from its review, and 1-2 star replies give the owner's number. Open any of them in the Studio to change the tone.</p>
+    </section>
+
+    {% include "_evolution.html" %}
+  </div>
+
+  <aside class="admin-side">
+    <section class="card">
+      <div class="card-head">
+        <span class="chip">{{ ic.icon("cpu", 16) }}</span>
+        <h2>Luminal usage</h2>
+      </div>
+      <dl class="kv">
+        <dt>Total calls</dt><dd data-stat="llm_calls">{{ "{:,}".format(stats.llm_calls) }}</dd>
+        <dt>Tokens in</dt><dd data-stat="tokens_in">{{ "{:,}".format(stats.tokens_in) }}</dd>
+        <dt>Tokens out</dt><dd data-stat="tokens_out">{{ "{:,}".format(stats.tokens_out) }}</dd>
+        <dt>Reasoning tokens</dt><dd data-stat="reasoning_tokens">{{ stats.reasoning_tokens }}</dd>
+        <dt>Est. cost</dt><dd>$<span data-stat="est_cost">{{ "%.4f"|format(stats.est_cost) }}</span></dd>
+        <dt>Model</dt><dd>{{ model }}</dd>
+      </dl>
+      <p class="insight">Cost per business: $<span data-stat="cost_per_business">{{ "%.4f"|format(stats.cost_per_business) }}</span>. Thinking is off, so every token is reply text.</p>
+    </section>
+  </aside>
+</div>
+
+<div class="info info-bottom"><span class="info-icon" aria-hidden="true">i</span>
+  <p><strong>{{ "{:,}".format(today.replies) }} replies generated on Luminal today for ${{ "%.2f"|format(today.cost) }}.</strong> That is the whole cost of goods.</p>
+</div>
+{% endblock %}

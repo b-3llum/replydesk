@@ -1,0 +1,93 @@
+{# Shared admin layout: sidebar with real page links, the page in {% block page %}, shared scripts. #}
+{% extends "base.html" %}
+{% block title %}{{ page_title }} · ReplyDesk admin{% endblock %}
+{% block body_class %}admin{% endblock %}
+
+{% block content %}
+{% import "_icons.html" as ic %}
+{% set q = ("?key=" ~ (key | urlencode)) if key else "" %}
+<div class="admin-layout">
+  <aside class="sidebar">
+    <a class="logo" href="/"><span class="logo-dot"></span>ReplyDesk</a>
+    <p class="nav-section">Pipeline</p>
+    <nav class="nav">
+      <a class="nav-item{{ ' is-active' if active == 'businesses' }}" href="/admin{{ q }}">{{ ic.icon("store", 16) }}Businesses</a>
+      <a class="nav-item{{ ' is-active' if active == 'reviews' }}" href="/admin/reviews{{ q }}">{{ ic.icon("message", 16) }}Reviews</a>
+      <a class="nav-item{{ ' is-active' if active == 'orders' }}" href="/admin/orders{{ q }}">{{ ic.icon("receipt", 16) }}Orders</a>
+    </nav>
+    <p class="nav-section">Today</p>
+    <nav class="nav">
+      <a class="nav-item{{ ' is-active' if active == 'outreach' }}" href="/admin/outreach{{ q }}">{{ ic.icon("send", 16) }}Outreach</a>
+    </nav>
+  </aside>
+
+  <div class="admin-main">
+    {% block page %}{% endblock %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var ADMIN_KEY = {{ key|tojson }};
+
+// Copy buttons that carry their text: preview links, outreach texts, phone numbers.
+document.addEventListener("click", function (event) {
+  var button = event.target.closest("[data-copy-value]");
+  if (button) copyText(button.dataset.copyValue, button);
+});
+
+// "Mark paid" asks first.
+document.addEventListener("submit", function (event) {
+  var message = event.target.dataset.confirm;
+  if (message && !window.confirm(message)) event.preventDefault();
+});
+
+// Segmented tabs over table rows: All / Not contacted / Contacted / Paid.
+document.querySelectorAll("[data-tab]").forEach(function (tab) {
+  tab.addEventListener("click", function () {
+    var group = tab.dataset.tab, shown = 0;
+    document.querySelectorAll("[data-tab]").forEach(function (other) {
+      other.classList.toggle("is-active", other === tab);
+      other.setAttribute("aria-pressed", other === tab ? "true" : "false");
+    });
+    document.querySelectorAll("tr[data-group]").forEach(function (row) {
+      row.hidden = group !== "all" && row.dataset.group !== group;
+      if (!row.hidden) shown += 1;
+    });
+    var empty = document.getElementById("tab-empty");
+    if (empty) empty.hidden = shown > 0;
+  });
+});
+
+// Refresh the numbers every 15 seconds.
+var FORMAT = {
+  businesses: function (n) { return n.toLocaleString(); },
+  reviews: function (n) { return n.toLocaleString(); },
+  unanswered: function (n) { return n.toLocaleString(); },
+  replies_ready: function (n) { return n.toLocaleString(); },
+  revenue: function (n) { return n.toLocaleString(); },
+  revenue_today: function (n) { return n.toLocaleString(); },
+  llm_calls: function (n) { return n.toLocaleString(); },
+  tokens_in: function (n) { return n.toLocaleString(); },
+  tokens_out: function (n) { return n.toLocaleString(); },
+  est_cost: function (n) { return n.toFixed(4); },
+  cost_per_business: function (n) { return n.toFixed(4); }
+};
+function refreshStats() {
+  fetch("/admin/stats.json?key=" + encodeURIComponent(ADMIN_KEY))
+    .then(function (response) { return response.ok ? response.json() : null; })
+    .then(function (s) {
+      if (!s) return;
+      document.querySelectorAll("[data-stat]").forEach(function (el) {
+        var value = s[el.dataset.stat];
+        if (value === undefined || value === null) return;
+        el.textContent = FORMAT[el.dataset.stat] ? FORMAT[el.dataset.stat](value) : value;
+      });
+      if (s.evolution_ready && document.querySelector("[data-evo-pending]")) window.location.reload();
+    })
+    .catch(function () {});
+}
+setInterval(refreshStats, 15000);
+</script>
+{% endblock %}

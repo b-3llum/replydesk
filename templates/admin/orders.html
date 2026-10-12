@@ -1,0 +1,66 @@
+{% extends "admin/_layout.html" %}
+
+{% block page %}
+{% import "_icons.html" as ic %}
+<header class="admin-header">
+  <div>
+    <h1 class="title">Orders</h1>
+    <p class="muted small">$29 one time per business, paid through Stripe. Numbers refresh every 15 seconds.</p>
+  </div>
+</header>
+
+<section class="card metrics">
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("receipt") }}</span>
+    <span class="metric-label">Paid orders</span>
+    <span class="metric-number" data-stat="paid_orders">{{ stats.paid_orders }}</span>
+    <span class="pill tone-green">$<span data-stat="revenue">{{ "{:,}".format(stats.revenue) }}</span> total</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("dollar") }}</span>
+    <span class="metric-label">Revenue today</span>
+    <span class="metric-number">$<span data-stat="revenue_today">{{ "{:,}".format(stats.revenue_today) }}</span></span>
+    <span class="pill tone-green"><span data-stat="orders_today">{{ stats.orders_today }}</span> today</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("store") }}</span>
+    <span class="metric-label">Still to close</span>
+    <span class="metric-number">{{ unpaid }}</span>
+    <span class="pill tone-gray">unpaid businesses</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("pen") }}</span>
+    <span class="metric-label">Cost per business</span>
+    <span class="metric-number">$<span data-stat="cost_per_business">{{ "%.4f"|format(stats.cost_per_business) }}</span></span>
+    <span class="pill tone-green">vs ${{ price }} price</span>
+  </div>
+</section>
+
+<section class="card" id="orders">
+  <div class="card-head">
+    <span class="chip">{{ ic.icon("receipt", 16) }}</span>
+    <h2>Orders<span class="sub">{{ stats.paid_orders }} total, ${{ "{:,}".format(stats.revenue) }}</span></h2>
+  </div>
+  {% if orders %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Business</th><th class="num">Amount</th><th>Method</th><th>Paid</th><th></th></tr></thead>
+      <tbody>
+      {% for o in orders %}
+        <tr>
+          <td class="strong">{{ o.name }}</td>
+          <td class="num">${{ o.amount }}</td>
+          <td class="muted">{{ o.method }}</td>
+          <td class="nowrap muted">{{ o.when }}</td>
+          <td>{% if o.full_url %}<a class="btn btn-secondary btn-sm" href="{{ o.full_url }}" target="_blank" rel="noopener">Full set</a>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">No orders yet. Mark a business paid when its Stripe payment comes in.</p>
+  {% endif %}
+  <p class="insight">A paid owner's preview link now opens their full set, so the same text message keeps working after they pay.</p>
+</section>
+{% endblock %}

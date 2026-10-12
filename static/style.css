@@ -320,6 +320,7 @@ body.admin .page { max-width: none; padding: 0; }
   background: var(--card);
 }
 .logo { display: flex; align-items: center; gap: 8px; margin: 0 12px 24px; font-size: 18px; font-weight: 700; }
+a.logo { color: var(--text); text-decoration: none; }
 .nav-section { margin: 18px 12px 6px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-item {

@@ -397,39 +397,103 @@ def back_to_admin(key):
     return RedirectResponse(f"/admin?{urllib.parse.urlencode({'key': key})}#businesses", status_code=303)
 
 
-@app.get("/admin")
-def admin(request: Request, key: str = ""):
+def _admin_or_login(request, key):
+    """(key, None) when allowed in; otherwise (None, the sign-in page) instead of an error."""
     try:
-        key = require_admin(key, request)
-    except HTTPException:  # the home page's Admin link lands here: ask for the key, not an error
-        return templates.TemplateResponse(request, "admin_login.html", {"error": bool(key)},
-                                          status_code=403 if key else 200)
-    stats_job = _pool.submit(store.stats)  # three Atlas round trips at once instead of in a row
-    biz_job = _pool.submit(store.list_businesses)
-    orders_job = _pool.submit(store.list_orders)
-    requests_job = _pool.submit(store.list_requests, 50)
-    midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_job = _pool.submit(store.replies_since, midnight.astimezone(timezone.utc).isoformat(timespec="seconds"))
-    businesses = biz_job.result()[:BUSINESS_ROWS]
-    rows = [business_row(b) for b in businesses]
-    names = {r["slug"]: r["name"] for r in rows}
-    orders = [{"name": names.get(o["business_id"], o["business_id"]), "amount": o.get("amount") or 0,
-               "method": o.get("method") or "", "when": local_time(o.get("paid_at"))}
-              for o in orders_job.result()[:ORDER_ROWS]]
-    first = [r for r in rows if r["status"] == "new" and r["phone"]][:5]  # rows come most unanswered first
-    leads = [dict(q, when=local_time(q.get("created_at")),
-                  maps_link=q.get("maps_url", "") if q.get("maps_url", "").startswith(("https://", "http://")) else "")
-             for q in requests_job.result() if q.get("status", "new") == "new"]
-    today = today_job.result()
-    today["cost"] = (today["tokens_in"] + today["tokens_out"]) / 1_000_000 * config.LLM_COST_PER_MILLION_TOKENS
-    response = templates.TemplateResponse(request, "admin.html", {
-        "key": key, "stats": admin_numbers(stats_job.result()), "rows": rows, "first": first,
-        "orders": orders, "price": config.PRICE_USD, "evo": evolution_card(), "leads": leads,
-        "today": today, "model": config.get("LUMINAL_MODEL") or ""})
-    if key:  # remember this browser, so the plain /admin link (home page footer) opens the panel next time
+        return require_admin(key, request), None
+    except HTTPException:
+        return None, templates.TemplateResponse(request, "admin_login.html", {"error": bool(key)},
+                                                status_code=403 if key else 200)
+
+
+def _admin_page(request, key, template, context):
+    """Render one admin page (templates/admin/...) and remember a browser that came with the key."""
+    response = templates.TemplateResponse(request, template, dict(context, key=key))
+    if key:  # so the plain /admin link (home page footer) opens the panel next time
         response.set_cookie(ADMIN_COOKIE, _admin_cookie_value(key), max_age=ADMIN_COOKIE_DAYS * 86400, httponly=True,
                             samesite="lax", secure=request.headers.get("x-forwarded-proto") == "https")
     return response
+
+
+def _today_usage():
+    midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    today = store.replies_since(midnight.astimezone(timezone.utc).isoformat(timespec="seconds"))
+    today["cost"] = (today["tokens_in"] + today["tokens_out"]) / 1_000_000 * config.LLM_COST_PER_MILLION_TOKENS
+    return today
+
+
+def _snip(text, n):
+    text = " ".join((text or "").split())
+    return text if len(text) <= n else text[:n].rsplit(" ", 1)[0] + "..."
+
+
+@app.get("/admin")
+def admin(request: Request, key: str = ""):
+    key, login = _admin_or_login(request, key)
+    if login:
+        return login
+    stats_job = _pool.submit(store.stats)  # Atlas round trips at once instead of in a row
+    biz_job = _pool.submit(store.list_businesses)
+    today_job = _pool.submit(_today_usage)
+    rows = [business_row(b) for b in biz_job.result()[:BUSINESS_ROWS]]
+    return _admin_page(request, key, "admin/businesses.html", {
+        "active": "businesses", "page_title": "Businesses", "stats": admin_numbers(stats_job.result()),
+        "rows": rows, "price": config.PRICE_USD, "today": today_job.result()})
+
+
+@app.get("/admin/reviews")
+def admin_reviews(request: Request, key: str = ""):
+    key, login = _admin_or_login(request, key)
+    if login:
+        return login
+    stats_job = _pool.submit(store.stats)
+    biz_job = _pool.submit(store.list_businesses)
+    latest_job = _pool.submit(store.latest_replies, 25)
+    today_job = _pool.submit(_today_usage)
+    businesses = {b["_id"]: b for b in biz_job.result()}
+    latest = [{"business": businesses[r["business_id"]]["name"], "author": r.get("author") or "Google user",
+               "stars": int(r.get("stars") or 0), "text": _snip(r.get("text"), 110), "reply": _snip(r.get("reply"), 160),
+               "studio": f"/studio/{r['business_id']}?t={businesses[r['business_id']]['preview_token']}"}
+              for r in latest_job.result() if r.get("business_id") in businesses]
+    return _admin_page(request, key, "admin/reviews.html", {
+        "active": "reviews", "page_title": "Reviews", "stats": admin_numbers(stats_job.result()), "latest": latest,
+        "evo": evolution_card(), "today": today_job.result(), "model": config.get("LUMINAL_MODEL") or ""})
+
+
+@app.get("/admin/orders")
+def admin_orders(request: Request, key: str = ""):
+    key, login = _admin_or_login(request, key)
+    if login:
+        return login
+    stats_job = _pool.submit(store.stats)
+    biz_job = _pool.submit(store.list_businesses)
+    orders_job = _pool.submit(store.list_orders)
+    businesses = {b["_id"]: b for b in biz_job.result()}
+    orders = []
+    for o in orders_job.result()[:ORDER_ROWS]:
+        biz = businesses.get(o["business_id"])
+        orders.append({"name": biz["name"] if biz else o["business_id"], "amount": o.get("amount") or 0,
+                       "method": o.get("method") or "", "when": local_time(o.get("paid_at")),
+                       "full_url": f"/full/{biz['_id']}?t={biz['preview_token']}" if biz else ""})
+    return _admin_page(request, key, "admin/orders.html", {
+        "active": "orders", "page_title": "Orders", "stats": admin_numbers(stats_job.result()), "orders": orders,
+        "unpaid": sum(1 for b in businesses.values() if not b.get("paid")), "price": config.PRICE_USD})
+
+
+@app.get("/admin/outreach")
+def admin_outreach(request: Request, key: str = ""):
+    key, login = _admin_or_login(request, key)
+    if login:
+        return login
+    biz_job = _pool.submit(store.list_businesses)
+    requests_job = _pool.submit(store.list_requests, 50)
+    rows = [business_row(b) for b in biz_job.result()[:BUSINESS_ROWS]]
+    first = [r for r in rows if r["status"] == "new" and not r["paid"] and r["phone"]][:5]  # most unanswered first
+    leads = [dict(q, when=local_time(q.get("created_at")),
+                  maps_link=q.get("maps_url", "") if q.get("maps_url", "").startswith(("https://", "http://")) else "")
+             for q in requests_job.result() if q.get("status", "new") == "new"]
+    return _admin_page(request, key, "admin/outreach.html", {
+        "active": "outreach", "page_title": "Outreach", "rows": rows, "first": first, "leads": leads})
 
 
 @app.get("/admin/stats.json")

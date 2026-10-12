@@ -1,0 +1,143 @@
+{% extends "admin/_layout.html" %}
+
+{% block page %}
+{% import "_icons.html" as ic %}
+{% set n_paid = rows | selectattr("paid") | list | length %}
+{% set n_new = rows | rejectattr("paid") | selectattr("status", "equalto", "new") | list | length %}
+{% set n_texted = rows | rejectattr("paid") | selectattr("status", "equalto", "texted") | list | length %}
+<header class="admin-header">
+  <div>
+    <h1 class="title">Outreach</h1>
+    <p class="muted small">Who to text next, with the message ready to copy.</p>
+  </div>
+  <a class="btn btn-secondary" href="/admin/export.csv?key={{ key|urlencode }}">Export CSV</a>
+</header>
+
+<section class="card metrics">
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("flag") }}</span>
+    <span class="metric-label">Not contacted</span>
+    <span class="metric-number">{{ n_new }}</span>
+    <span class="pill tone-gray">ready to text</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("send") }}</span>
+    <span class="metric-label">Contacted</span>
+    <span class="metric-number">{{ n_texted }}</span>
+    <span class="pill tone-blue">waiting on reply</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("dollar") }}</span>
+    <span class="metric-label">Paid</span>
+    <span class="metric-number">{{ n_paid }}</span>
+    <span class="pill tone-green">closed</span>
+  </div>
+  <div class="metric">
+    <span class="chip chip-lg">{{ ic.icon("inbox") }}</span>
+    <span class="metric-label">Requests</span>
+    <span class="metric-number">{{ leads | length }}</span>
+    <span class="pill tone-blue">from the home page</span>
+  </div>
+</section>
+
+<div class="admin-grid">
+  <div class="admin-col">
+    <section class="card">
+      <div class="card-head">
+        <span class="chip">{{ ic.icon("send", 16) }}</span>
+        <h2>Outreach texts<span class="sub">One message per business, with its preview link</span></h2>
+      </div>
+      {% if rows %}
+      <div class="tabs tabs-row" role="group" aria-label="Filter businesses">
+        <button type="button" class="tab is-active" data-tab="all" aria-pressed="true">All <span class="tab-count">{{ rows | length }}</span></button>
+        <button type="button" class="tab" data-tab="new" aria-pressed="false">Not contacted <span class="tab-count">{{ n_new }}</span></button>
+        <button type="button" class="tab" data-tab="texted" aria-pressed="false">Contacted <span class="tab-count">{{ n_texted }}</span></button>
+        <button type="button" class="tab" data-tab="paid" aria-pressed="false">Paid <span class="tab-count">{{ n_paid }}</span></button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Business</th><th class="num">Unanswered</th><th>Status</th><th>Message</th><th></th></tr></thead>
+          <tbody>
+          {% for r in rows %}
+            <tr data-group="{{ 'paid' if r.paid else ('texted' if r.status == 'texted' else 'new') }}">
+              <td><p class="strong">{{ r.name }}</p><p class="muted small">{{ r.phone or "no phone" }}</p></td>
+              <td class="num strong{{ ' num-red' if r.unanswered > 30 }}">{{ r.unanswered }}</td>
+              <td>{% if r.paid %}<span class="pill tone-green">Paid</span>{% elif r.status == "texted" %}<span class="pill tone-blue">Contacted</span>{% else %}<span class="pill tone-gray">Not contacted</span>{% endif %}</td>
+              <td class="muted small">{{ r.text }}</td>
+              <td>
+                <div class="actions">
+                  <button type="button" class="btn btn-secondary btn-icon" data-copy-value="{{ r.text }}"
+                          aria-label="Copy outreach text" title="Copy outreach text">{{ ic.icon("copy", 16) }}</button>
+                  <a class="btn btn-secondary btn-sm" href="{{ r.preview_url }}" target="_blank" rel="noopener">Open</a>
+                  {% if r.status == "new" and not r.paid %}
+                  <form method="post" action="/admin/mark-texted/{{ r.slug }}?key={{ key|urlencode }}">
+                    <button class="btn btn-secondary btn-sm">Texted</button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="empty" id="tab-empty" hidden>No businesses here yet.</p>
+      {% else %}
+      <p class="empty">No businesses yet. Run python run.py scrape to find some.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside class="admin-side">
+    <section class="card">
+      <div class="card-head">
+        <span class="chip">{{ ic.icon("flag", 16) }}</span>
+        <h2>Do these first<span class="sub">Most unanswered, not contacted yet</span></h2>
+      </div>
+      {% if first %}
+      <ul class="todo">
+      {% for r in first %}
+        <li>
+          <div>
+            <p class="strong">{{ r.name }}</p>
+            <p class="muted small">{{ r.phone }} · <span class="{{ 'num-red' if r.unanswered > 30 }}">{{ r.unanswered }} unanswered</span></p>
+          </div>
+          <div class="buttons">
+            <button type="button" class="btn btn-secondary btn-icon" data-copy-value="{{ r.text }}"
+                    aria-label="Copy outreach text" title="Copy outreach text">{{ ic.icon("copy", 16) }}</button>
+            <a class="btn btn-secondary btn-sm" href="{{ r.preview_url }}" target="_blank" rel="noopener">Open</a>
+          </div>
+        </li>
+      {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty">Everyone with a phone number has been contacted.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" id="requests">
+      <div class="card-head">
+        <span class="chip">{{ ic.icon("inbox", 16) }}</span>
+        <h2>Requests<span class="sub">From the home page</span></h2>
+        <span class="pill tone-blue action">{{ leads | length }} new</span>
+      </div>
+      {% if leads %}
+      <ul class="todo">
+      {% for q in leads %}
+        <li>
+          <div>
+            <p class="strong">{{ q.name }}</p>
+            <p class="muted small">{{ q.phone }} · {{ "$19/mo waitlist" if q.plan == "monthly" else "$29 one time" }} · {{ q.when }}</p>
+            {% if q.maps_link %}<p class="small"><a href="{{ q.maps_link }}" target="_blank" rel="noopener noreferrer">Maps link</a></p>{% endif %}
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" data-copy-value="{{ q.phone }}">Copy</button>
+        </li>
+      {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty">No requests yet. They show up when someone asks for a preview on the home page.</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endblock %}
