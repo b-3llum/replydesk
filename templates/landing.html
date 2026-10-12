@@ -17,6 +17,21 @@
   </div>
 </section>
 
+{% if tour %}
+<section class="card tour">
+  <div class="card-head">
+    <span class="chip"><span class="logo-dot"></span></span>
+    <h2>Take the tour<span class="sub">Everything below is live, on real Philadelphia businesses.</span></h2>
+  </div>
+  <div class="tour-links">
+    {% if tour.preview %}<a class="btn btn-secondary" href="{{ tour.preview }}">1. Owner preview<span class="tour-sub">{{ tour.preview_name }}</span></a>{% endif %}
+    {% if tour.full %}<a class="btn btn-secondary" href="{{ tour.full }}">2. Paid full set<span class="tour-sub">{{ tour.full_name }}</span></a>{% endif %}
+    {% if tour.studio %}<a class="btn btn-secondary" href="{{ tour.studio }}">3. Reply Studio<span class="tour-sub">desktop</span></a>{% endif %}
+    <a class="btn btn-primary" href="{{ tour.admin }}">4. Admin dashboard<span class="tour-sub">pipeline, Luminal usage, prompt evolution</span></a>
+  </div>
+</section>
+{% endif %}
+
 {% import "_icons.html" as ic %}
 <section class="card metrics metrics-3">
   <div class="metric">

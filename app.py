@@ -225,18 +225,36 @@ def thanks(request: Request):
 
 # ---------------------------------------------------------------- landing page and leads
 
-EXAMPLE_SLUG = "loco-pez-west-philly-b71a"  # "See a real example"
 PLANS = ("one-time", "monthly")
+# DEMO_MODE=1 in .env: judges get a tour on the home page and the admin opens without a key.
+DEMO_MODE = (config.get("DEMO_MODE") or "").lower() in ("1", "true", "yes")
+
+
+def _examples():
+    """An unpaid business to show the locked preview, and a paid one to show the full set."""
+    businesses = store.list_businesses()  # most unanswered first
+    unpaid = next((b for b in businesses if not b.get("paid") and (b.get("replies_ready") or 0) >= 20), None)
+    paid = next((b for b in businesses if b.get("paid")), None)
+    return unpaid, paid
 
 
 def landing_context(**extra):
     s = cached_stats()  # 5 s cache: the public page must not hammer Atlas
-    example = store.get_business(EXAMPLE_SLUG)
+    unpaid, paid = _examples()
+    tour = None
+    if DEMO_MODE:
+        tour = {"preview": f"/p/{unpaid['_id']}?t={unpaid['preview_token']}" if unpaid else None,
+                "preview_name": unpaid["name"] if unpaid else "",
+                "studio": f"/studio/{unpaid['_id']}?t={unpaid['preview_token']}" if unpaid else None,
+                "full": f"/full/{paid['_id']}?t={paid['preview_token']}" if paid else None,
+                "full_name": paid["name"] if paid else "",
+                "admin": "/admin"}
     return dict({
         "stats": s,
         "pct": round(100 * s["unanswered"] / s["reviews"]) if s["reviews"] else 0,
-        "example_url": f"/p/{EXAMPLE_SLUG}?t={example['preview_token']}" if example else None,
+        "example_url": f"/p/{unpaid['_id']}?t={unpaid['preview_token']}" if unpaid else None,
         "plan": "one-time",
+        "tour": tour,
     }, **extra)
 
 
@@ -342,6 +360,8 @@ def require_admin(key, request=None):
     cookie = request.cookies.get(ADMIN_COOKIE, "") if request is not None else ""
     if expected and cookie and secrets.compare_digest(cookie.encode(), _admin_cookie_value(expected).encode()):
         return expected
+    if DEMO_MODE:  # open for judges; "" keeps the real key out of the page's links and scripts
+        return ""
     raise HTTPException(status_code=403, detail="This admin link is not valid")
 
 
@@ -406,9 +426,9 @@ def admin(request: Request, key: str = ""):
         "key": key, "stats": admin_numbers(stats_job.result()), "rows": rows, "first": first,
         "orders": orders, "price": config.PRICE_USD, "evo": evolution_card(), "leads": leads,
         "today": today, "model": config.get("LUMINAL_MODEL") or ""})
-    # Remember this browser, so the plain /admin link (home page footer) opens the panel next time.
-    response.set_cookie(ADMIN_COOKIE, _admin_cookie_value(key), max_age=ADMIN_COOKIE_DAYS * 86400, httponly=True,
-                        samesite="lax", secure=request.headers.get("x-forwarded-proto") == "https")
+    if key:  # remember this browser, so the plain /admin link (home page footer) opens the panel next time
+        response.set_cookie(ADMIN_COOKIE, _admin_cookie_value(key), max_age=ADMIN_COOKIE_DAYS * 86400, httponly=True,
+                            samesite="lax", secure=request.headers.get("x-forwarded-proto") == "https")
     return response
 
 
